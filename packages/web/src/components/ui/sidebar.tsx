@@ -9,6 +9,7 @@ const navItems = [
   { href: '/risk', label: 'Risk Assessment', icon: 'shield' },
   { href: '/documents', label: 'Documents', icon: 'file' },
   { href: '/conformity', label: 'Conformity', icon: 'check-circle' },
+  { href: '/evidence', label: 'Evidence', icon: 'paperclip' },
   { href: '/monitoring', label: 'Monitoring', icon: 'activity' },
   { href: '/incidents', label: 'Incidents', icon: 'alert' },
   { href: '/settings', label: 'Settings', icon: 'settings' },
@@ -26,6 +27,8 @@ const iconPaths: Record<string, string> = {
     'M22 12h-4l-3 9L9 3l-3 9H2',
   alert:
     'M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z M12 9v4 M12 17h.01',
+  paperclip:
+    'M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48',
   settings:
     'M12 15a3 3 0 100-6 3 3 0 000 6z M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z',
 };
