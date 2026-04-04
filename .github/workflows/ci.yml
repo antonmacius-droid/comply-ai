@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [18, 20, 22]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Install root dependencies
+        run: npm install
+
+      - name: Install core dependencies
+        run: npm install
+        working-directory: packages/core
+
+      - name: Build core
+        run: npm run build
+        working-directory: packages/core
+
+      - name: Run core tests
+        run: npx vitest run
+        working-directory: packages/core
+
+      - name: Install CLI dependencies
+        run: npm install
+        working-directory: packages/cli
+
+      - name: Build CLI
+        run: npm run build
+        working-directory: packages/cli
+
+      - name: Run CLI tests
+        run: npx vitest run
+        working-directory: packages/cli
+
+      - name: Type check web
+        run: npx tsc --noEmit
+        working-directory: packages/web
+        continue-on-error: true

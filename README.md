@@ -304,3 +304,12 @@ For commercial licensing or compliance consulting: **info@afkzonagroup.lt**
 **Dashboard** (packages/web): **BSL 1.1** — free for development and non-commercial use. Commercial production requires a license. Converts to MIT on 2029-04-01.
 
 Copyright (c) 2026 AFKzona Group — info@afkzonagroup.lt
+
+## Roadmap
+
+- [ ] npm publish (@comply-ai/core, @comply-ai/cli)
+- [ ] PyPI publish (Python SDK)
+- [ ] Postgres integration (currently in-memory)
+- [ ] BullMQ background jobs
+- [ ] Landing page + docs site
+- [ ] Docker image on GHCR

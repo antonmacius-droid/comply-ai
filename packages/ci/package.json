@@ -11,7 +11,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "node build.mjs",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf github-actions/comply-check/dist"
   },
