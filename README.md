@@ -351,6 +351,44 @@ For commercial licensing or compliance consulting: **info@afkzonagroup.lt**
 
 - [Bulwark AI](https://github.com/antonmacius-droid/bulwark-ai) — Enterprise AI governance gateway (PII detection, prompt injection, budgets, audit logging, GDPR/SOC 2)
 
+## Licensing
+
+**Core packages** (core, cli, ci) are **MIT** — use anywhere, no license key needed.
+
+**Dashboard** (packages/web) is **BSL 1.1** — free for development, testing, and non-commercial use. Commercial production use requires a license key.
+
+### Getting a License Key
+
+1. Purchase a license at [afkzonagroup.lt/license](https://afkzonagroup.lt/license)
+2. You will receive a key in the format: `COMPLY-TEAM-acme-20270401-a1b2c3d4e5f6a1b2`
+3. Add it to your `.env` file:
+
+```bash
+# Comply AI license key
+COMPLY_LICENSE_KEY=COMPLY-TEAM-acme-20270401-a1b2c3d4e5f6a1b2
+
+# Required for signature verification
+LICENSE_SIGNING_SECRET=your-shared-secret
+```
+
+4. Restart your application
+
+### How It Works
+
+- **Offline verification** — the key is HMAC-SHA256 signed. Verification recomputes the signature locally. No phone-home, no telemetry, no network calls.
+- **No functionality is blocked** — an invalid or missing key shows a yellow "Unlicensed" banner in the dashboard when running in production mode (`NODE_ENV=production`). The software remains fully functional.
+- The banner is dismissible per session but reappears on page refresh.
+
+### Plans
+
+| Plan | Use Case |
+|------|----------|
+| **Pro** | Small teams, single deployment |
+| **Team** | Multiple deployments, priority support |
+| **Enterprise** | Unlimited deployments, custom terms, SLA |
+
+For custom licensing or compliance consulting: **info@afkzonagroup.lt**
+
 ## License
 
 **Core** (packages/core, packages/cli, packages/ci): **MIT** — use anywhere.
