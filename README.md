@@ -4,12 +4,16 @@
 </p>
 
 <p align="center">
-  <a href="#quick-start">Quick Start</a> · <a href="#features">Features</a> · <a href="#cli">CLI</a> · <a href="#docker">Docker</a> · <a href="#comparison">Comparison</a> · <a href="#license">License</a>
+  <a href="#quick-start">Quick Start</a> · <a href="#features">Features</a> · <a href="#screenshots">Screenshots</a> · <a href="#cli">CLI</a> · <a href="#docker">Docker</a> · <a href="#comparison">Comparison</a> · <a href="#license">License</a>
 </p>
 
 <p align="center">
   Open-source compliance engine for the EU Artificial Intelligence Act (Regulation 2024/1689).<br>
   Risk classification, checklist generation, model cards, incident tracking, and CI/CD integration.
+</p>
+
+<p align="center">
+  Built by <a href="https://afkzonagroup.lt"><strong>AFKzona Group</strong></a> · See also <a href="https://github.com/antonmacius-droid/bulwark-ai">Bulwark AI</a>
 </p>
 
 ```bash
@@ -21,6 +25,18 @@ MIT + BSL 1.1 | TypeScript-native | Self-hosted
 ---
 
 ## Quick Start
+
+```bash
+# Option 1: Docker (recommended)
+git clone https://github.com/afkzona/comply-ai.git
+cd comply-ai
+./scripts/setup.sh
+docker compose up -d
+# Dashboard: http://localhost:3300
+
+# Option 2: npm
+npm install @comply-ai/core
+```
 
 ```typescript
 import { classifyRisk } from "@comply-ai/core";
@@ -46,13 +62,41 @@ console.log(result.requirements);    // ["Risk management system", "Data governa
 | **GPAI Assessment** | General-purpose AI model classification with systemic risk detection (Articles 51-56) |
 | **Compliance Checklists** | Auto-generated requirement checklists based on risk level (Articles 8-15, 50) |
 | **Model Cards** | Generate and validate EU AI Act-compliant model cards |
-| **Technical Documentation** | Templates for Article 11 technical documentation |
+| **Technical Documentation** | Annex IV document generation with pre-filled templates |
 | **Incident Tracking** | Article 62 serious incident reporting with 72-hour notification tracking |
 | **Conformity Assessment** | Internal and third-party assessment workflow (Article 43) |
-| **CLI Tool** | `comply-ai classify`, `comply-ai check`, `comply-ai model-card` |
+| **CLI Tool** | `comply-ai classify`, `comply-ai check`, `comply-ai model-card`, `comply-ai status`, `comply-ai register`, `comply-ai init` |
 | **CI/CD Integration** | GitHub Actions and GitLab CI templates for automated compliance checks |
 | **Dashboard** | Web UI for managing AI systems, documents, and compliance status |
+| **Landing Page** | Marketing page with feature overview, pricing, and comparison table |
+| **Documentation** | Built-in docs site with API reference, CLI guide, and deployment instructions |
 | **Worker Queue** | Background processing for assessments and document generation (BullMQ) |
+
+## Screenshots
+
+### Landing Page
+Dark-themed marketing landing page with hero section, feature grid, CLI demo, comparison table, and pricing tiers (Open Source free, Team €299/mo, Enterprise €999/mo).
+
+### Dashboard
+Overview with KPI cards (total systems, high-risk count, pending assessments, open incidents, compliance score), recent activity feed, risk distribution chart, and upcoming deadlines.
+
+### AI System Registry
+Searchable table of registered AI systems with risk level badges, compliance status, provider info, and bulk actions.
+
+### Risk Assessment
+Step-by-step risk classification wizard that maps systems to EU AI Act tiers. Shows applicable articles, requirements, and conformity assessment type.
+
+### Document Generator
+Annex IV technical documentation builder with section-by-section templates, completion tracking, and PDF export.
+
+### Conformity Assessment
+Assessment workflow tracker showing internal/third-party assessment progress, evidence collection, and approval status.
+
+### Post-Market Monitoring
+Real-time monitoring dashboard with system health metrics, incident timeline, and Article 62 alert status.
+
+### Documentation Site
+Built-in documentation with left sidebar navigation covering API reference, CLI commands, Annex IV guide, Bulwark AI integration, and Docker deployment.
 
 ## Risk Classification Example
 
@@ -176,11 +220,11 @@ comply-check:
 ## Docker
 
 ```bash
-git clone https://github.com/comply-ai/comply-ai.git
+git clone https://github.com/afkzona/comply-ai.git
 cd comply-ai
 
-# Set secrets
-echo "NEXTAUTH_SECRET=$(openssl rand -base64 32)" > .env
+# First-run setup (creates .env, checks deps)
+./scripts/setup.sh
 
 # Start all services
 docker compose up -d
@@ -198,6 +242,13 @@ docker compose up -d
 | `comply-worker` | BullMQ background workers | — |
 | `postgres` | PostgreSQL 16 | 5432 |
 | `redis` | Redis 7 (job queue, caching) | 6379 |
+
+### Development Mode
+
+```bash
+# Hot reload with mounted source volumes
+docker compose -f docker-compose.yml -f docker-compose.override.yml up
+```
 
 ### Co-deployment with Bulwark AI
 
@@ -249,14 +300,17 @@ Comply AI and [Bulwark AI](https://github.com/antonmacius-droid/bulwark-ai) shar
 | **Risk classification** | Automated, Article 5-6 + Annex III | Manual | Partial | Partial |
 | **GPAI assessment** | Yes (Art. 51-56) | No | Partial | No |
 | **Model cards** | Generate + validate | No | Generate | No |
-| **CLI tool** | Yes | No | No | No |
+| **CLI tool** | Yes (6 commands) | No | No | No |
 | **CI/CD integration** | GitHub Actions + GitLab | No | No | No |
-| **Conformity assessment** | Internal + third-party | No | Partial | No |
+| **Conformity assessment** | Internal + third-party (Art. 43) | No | Partial | No |
 | **Incident tracking** | Art. 62 with 72h alerts | Generic | No | No |
+| **Documentation gen** | Annex IV templates | No | Partial | No |
+| **Post-market monitoring** | Yes (Art. 72) | No | No | No |
 | **Pricing** | Free (self-hosted) | $$$$ | $$$$ | $$$ |
 | **Data residency** | Your infrastructure | US/EU | US/EU | EU |
 | **TypeScript-native** | Yes | N/A | N/A | N/A |
 | **Embeddable** | Yes (`npm install`) | No | No | No |
+| **Landing page** | Built-in marketing site | N/A | N/A | N/A |
 
 ## Packages
 
@@ -265,13 +319,13 @@ Comply AI and [Bulwark AI](https://github.com/antonmacius-droid/bulwark-ai) shar
 | `@comply-ai/core` | MIT | Risk classification, types, model cards, checklists |
 | `@comply-ai/cli` | MIT | CLI tool for compliance checks and classification |
 | `@comply-ai/ci` | MIT | GitHub Actions and GitLab CI templates |
-| `@comply-ai/web` | BSL 1.1 | Dashboard, API, worker (converts to MIT 2029-04-01) |
+| `@comply-ai/web` | BSL 1.1 | Dashboard, API, worker, landing page (converts to MIT 2029-04-01) |
 
 ## Legal & Compliance Disclaimer
 
 Comply AI provides tools that can assist with EU AI Act compliance workflows, including risk classification, documentation generation, and conformity assessment tracking.
 
-**Use of this software does not by itself ensure compliance with the EU AI Act or any other laws or regulations.**
+**Use of this software does not by itself ensure compliance with the EU AI Act (Regulation 2024/1689) or any other laws or regulations.**
 
 Users are responsible for:
 - Validating classification results against their specific use case
@@ -279,7 +333,7 @@ Users are responsible for:
 - Engaging qualified legal and compliance professionals
 - Submitting required registrations to the EU AI Database
 
-The risk classification engine is based on publicly available regulation text and is provided as a decision-support tool, not as legal advice.
+The risk classification engine is based on publicly available regulation text and is provided as a decision-support tool, not as legal advice. EU AI Act article references (Articles 5-6, 8-15, 43, 50-56, 62, 72, Annex III, Annex IV) are informational and do not constitute legal advice. Users should consult qualified legal counsel for compliance decisions specific to their AI systems and jurisdiction.
 
 ## Security Notice
 
@@ -303,13 +357,25 @@ For commercial licensing or compliance consulting: **info@afkzonagroup.lt**
 
 **Dashboard** (packages/web): **BSL 1.1** — free for development and non-commercial use. Commercial production requires a license. Converts to MIT on 2029-04-01.
 
-Copyright (c) 2026 AFKzona Group — info@afkzonagroup.lt
+Copyright (c) 2026 [AFKzona Group](https://afkzonagroup.lt) — info@afkzonagroup.lt
 
 ## Roadmap
 
+- [x] Risk classification engine (4-tier + GPAI)
+- [x] CLI tool (6 commands)
+- [x] Web dashboard (10 pages)
+- [x] Conformity assessment workflow
+- [x] Post-market monitoring
+- [x] Incident tracking (Art. 62)
+- [x] CI/CD templates (GitHub Actions + GitLab)
+- [x] Docker deployment
+- [x] Landing page + docs site
 - [ ] npm publish (@comply-ai/core, @comply-ai/cli)
-- [ ] PyPI publish (Python SDK)
-- [ ] Postgres integration (currently in-memory)
-- [ ] BullMQ background jobs
-- [ ] Landing page + docs site
 - [ ] Docker image on GHCR
+- [ ] Postgres integration (replace in-memory storage)
+- [ ] Real PDF generation with @react-pdf/renderer
+- [ ] AI-assisted document filling (LLM integration)
+- [ ] SSO/SAML authentication
+- [ ] Python SDK
+- [ ] Automated bias/fairness testing integration
+- [ ] Multi-language support (EU languages)
