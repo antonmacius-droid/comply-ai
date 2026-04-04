@@ -5,6 +5,7 @@ import { Card, KpiCard } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
+import { DEMO_MODE } from '@/lib/demo-data';
 
 // ---------------------------------------------------------------------------
 // Types & mock data
@@ -75,16 +76,16 @@ function generateChecks(): HealthCell[] {
   });
 }
 
-const initialSystems: SystemMonitor[] = [
+const initialSystems: SystemMonitor[] = DEMO_MODE ? [
   { id: 'sys_001', name: 'Credit Scoring Model', lastCheck: '2h ago', checks: generateChecks() },
   { id: 'sys_002', name: 'Resume Screening AI', lastCheck: '3h ago', checks: generateChecks() },
   { id: 'sys_003', name: 'Fraud Detection System', lastCheck: '2h ago', checks: generateChecks() },
   { id: 'sys_004', name: 'Customer Support Chatbot', lastCheck: '1h ago', checks: generateChecks() },
   { id: 'sys_005', name: 'Recommendation Engine', lastCheck: '4h ago', checks: generateChecks() },
   { id: 'sys_006', name: 'Document Summarizer', lastCheck: '2h ago', checks: generateChecks() },
-];
+] : [];
 
-const initialRecentChecks: RecentCheck[] = [
+const initialRecentChecks: RecentCheck[] = DEMO_MODE ? [
   { system: 'Credit Scoring Model', systemId: 'sys_001', type: 'Drift', status: 'warning', detail: 'PSI: 0.18 (threshold: 0.15)', score: 68, time: '2026-04-04 14:00', recommendations: ['Review input data distribution', 'Consider model retraining'], metrics: { psi: 0.18, threshold: 0.15 } },
   { system: 'Document Summarizer', systemId: 'sys_006', type: 'Performance', status: 'warning', detail: 'Latency p99: 4.2s (threshold: 3s)', score: 62, time: '2026-04-04 14:00', recommendations: ['Optimize inference pipeline', 'Consider model distillation'], metrics: { p99_ms: 4200, threshold_ms: 3000 } },
   { system: 'Fraud Detection System', systemId: 'sys_003', type: 'Bias', status: 'warning', detail: 'DI ratio age group 18-25: 0.78', score: 71, time: '2026-04-04 14:00', recommendations: ['Review model outputs across age groups', 'Fairness-aware retraining'], metrics: { di_ratio: 0.78, threshold: 0.80 } },
@@ -93,7 +94,7 @@ const initialRecentChecks: RecentCheck[] = [
   { system: 'Resume Screening AI', systemId: 'sys_002', type: 'Bias', status: 'pass', detail: 'DI ratio: 0.88 (all groups)', score: 88, time: '2026-04-04 10:00', recommendations: [], metrics: { di_ratio: 0.88 } },
   { system: 'Customer Support Chatbot', systemId: 'sys_004', type: 'Performance', status: 'pass', detail: 'Avg response: 1.2s', score: 90, time: '2026-04-04 08:00', recommendations: [], metrics: { avg_response_ms: 1200 } },
   { system: 'Recommendation Engine', systemId: 'sys_005', type: 'Performance', status: 'pass', detail: 'CTR: 4.8%, nDCG: 0.72', score: 85, time: '2026-04-03 14:00', recommendations: [], metrics: { ctr: 4.8, ndcg: 0.72 } },
-];
+] : [];
 
 // ---------------------------------------------------------------------------
 // Trend data (last 30 days simulated)

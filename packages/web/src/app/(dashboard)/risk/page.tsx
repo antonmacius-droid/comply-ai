@@ -4,6 +4,7 @@ import { useState, useMemo } from 'react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { DEMO_MODE } from '@/lib/demo-data';
 
 /* ─── Data Types ─── */
 interface WizardStep {
@@ -23,7 +24,7 @@ const STEPS: WizardStep[] = [
   { id: 'review', number: 7, title: 'Review & Submit', description: 'Final summary and submission' },
 ];
 
-const mockSystems = [
+const mockSystems = DEMO_MODE ? [
   { id: 'sys_001', name: 'Credit Scoring Model', provider: 'Internal', risk: 'high' },
   { id: 'sys_002', name: 'Customer Support Chatbot', provider: 'OpenAI GPT-4o', risk: 'limited' },
   { id: 'sys_003', name: 'Resume Screening AI', provider: 'Internal', risk: 'high' },
@@ -31,7 +32,7 @@ const mockSystems = [
   { id: 'sys_005', name: 'Document Summarizer', provider: 'Anthropic Claude', risk: 'gpai' },
   { id: 'sys_006', name: 'Content Moderation AI', provider: 'Internal', risk: 'limited' },
   { id: 'sys_007', name: 'Emotion Recognition (CCTV)', provider: 'Internal', risk: 'high' },
-];
+] : [];
 
 /* ─── Article 5 Prohibited Practices ─── */
 const prohibitedQuestions = [

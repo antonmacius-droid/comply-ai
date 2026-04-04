@@ -5,6 +5,7 @@ import { Card, KpiCard } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { DEMO_MODE } from '@/lib/demo-data';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -36,7 +37,7 @@ interface ScanResult {
 // Mock previously scanned results
 // ---------------------------------------------------------------------------
 
-const previousScans: ScanResult[] = [
+const previousScans: ScanResult[] = DEMO_MODE ? [
   {
     id: 'scan_001',
     org: 'acme-corp',
@@ -70,7 +71,7 @@ const previousScans: ScanResult[] = [
       },
     ],
   },
-];
+] : [];
 
 // ---------------------------------------------------------------------------
 // Simulated scan

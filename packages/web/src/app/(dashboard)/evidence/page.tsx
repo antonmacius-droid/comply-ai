@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
+import { DEMO_MODE } from '@/lib/demo-data';
 
 /* ─── Types ─── */
 interface EvidenceRecord {
@@ -26,7 +27,7 @@ interface EvidenceRecord {
 }
 
 /* ─── Mock Data ─── */
-const mockEvidence: EvidenceRecord[] = [
+const mockEvidence: EvidenceRecord[] = DEMO_MODE ? [
   {
     id: 'ev_001',
     title: 'Training Data Quality Report',
@@ -102,21 +103,21 @@ const mockEvidence: EvidenceRecord[] = [
     uploadedAt: '2026-03-18T11:20:00Z',
     sha256: '4e07408562bedb8b60ce05c1decfe3ad16b72230967de01f640b7e4729b49fce',
   },
-];
+] : [];
 
-const mockSystems = [
+const mockSystems = DEMO_MODE ? [
   { value: 'sys_001', label: 'Credit Scoring Model' },
   { value: 'sys_002', label: 'Customer Support Chatbot' },
   { value: 'sys_003', label: 'Resume Screening AI' },
   { value: 'sys_004', label: 'Fraud Detection System' },
   { value: 'sys_005', label: 'Document Summarizer' },
-];
+] : [];
 
-const mockAssessments = [
+const mockAssessments = DEMO_MODE ? [
   { value: '', label: 'None' },
   { value: 'ra_001', label: 'RA-001 — Credit Scoring Model' },
   { value: 'ra_002', label: 'RA-002 — Customer Support Chatbot' },
-];
+] : [];
 
 /* ─── Helpers ─── */
 function formatFileSize(bytes: number): string {

@@ -9,6 +9,7 @@ import { DataTable } from '@/components/ui/table';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
+import { DEMO_MODE } from '@/lib/demo-data';
 
 type SystemRow = Record<string, unknown> & {
   id: string;
@@ -20,7 +21,7 @@ type SystemRow = Record<string, unknown> & {
   lastAssessed: string;
 };
 
-const mockSystems: SystemRow[] = [
+const mockSystems: SystemRow[] = DEMO_MODE ? [
   { id: '1', name: 'Credit Scoring Model', riskLevel: 'high', status: 'active', provider: 'Internal', model: 'XGBoost v3', lastAssessed: '2026-03-15' },
   { id: '2', name: 'Resume Screening AI', riskLevel: 'high', status: 'active', provider: 'Internal', model: 'BERT-based', lastAssessed: '2026-03-01' },
   { id: '3', name: 'Customer Support Chatbot', riskLevel: 'limited', status: 'active', provider: 'OpenAI', model: 'GPT-4o', lastAssessed: '2026-02-20' },
@@ -31,7 +32,7 @@ const mockSystems: SystemRow[] = [
   { id: '8', name: 'Emotion Recognition (CCTV)', riskLevel: 'high', status: 'archived', provider: 'Internal', model: 'CNN-LSTM', lastAssessed: '2025-12-01' },
   { id: '9', name: 'Predictive Maintenance', riskLevel: 'minimal', status: 'active', provider: 'Internal', model: 'ARIMA + RF', lastAssessed: '2026-03-05' },
   { id: '10', name: 'Translation Service', riskLevel: 'limited', status: 'active', provider: 'DeepL', model: 'DeepL API', lastAssessed: '2026-02-10' },
-];
+] : [];
 
 const statusStyles: Record<string, { bg: string; color: string }> = {
   active: { bg: '#F0FDF4', color: '#16A34A' },

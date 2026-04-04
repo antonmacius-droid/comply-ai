@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
+import { DEMO_MODE } from '@/lib/demo-data';
 
 // ---------------------------------------------------------------------------
 // Mock data
@@ -33,7 +34,7 @@ interface MockIncident {
   preventiveMeasures?: string;
 }
 
-const initialIncidents: MockIncident[] = [
+const initialIncidents: MockIncident[] = DEMO_MODE ? [
   {
     id: '1',
     title: 'Unexpected score distribution shift',
@@ -118,7 +119,7 @@ const initialIncidents: MockIncident[] = [
     correctiveActions: ['Schema validation on data ingest', 'Fallback to cached features', 'Alerting on data freshness'],
     preventiveMeasures: 'Weekly API contract checks with upstream providers',
   },
-];
+] : [];
 
 // ---------------------------------------------------------------------------
 // Timeline generation

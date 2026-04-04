@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
+import { DEMO_MODE } from '@/lib/demo-data';
 
 /* ─── Types ─── */
 type ComplianceStatus = 'pending' | 'compliant' | 'non_compliant' | 'na';
@@ -27,7 +28,7 @@ interface SystemAssessment {
 }
 
 /* ─── Mock Evidence ─── */
-const mockEvidencePool = [
+const mockEvidencePool = DEMO_MODE ? [
   { id: 'ev_001', title: 'Training Data Quality Report', type: 'PDF' },
   { id: 'ev_002', title: 'Bias Testing Results', type: 'XLSX' },
   { id: 'ev_003', title: 'Human Oversight Protocol', type: 'DOCX' },
@@ -36,7 +37,7 @@ const mockEvidencePool = [
   { id: 'ev_006', title: 'Incident Response Plan', type: 'PDF' },
   { id: 'ev_007', title: 'Data Governance Policy', type: 'DOCX' },
   { id: 'ev_008', title: 'Security Audit Report', type: 'PDF' },
-];
+] : [];
 
 /* ─── Full Checklist Template ─── */
 function buildChecklist(): ChecklistItem[] {
@@ -98,7 +99,7 @@ function buildChecklist(): ChecklistItem[] {
 }
 
 /* ─── Systems ─── */
-const systemsList: SystemAssessment[] = [
+const systemsList: SystemAssessment[] = DEMO_MODE ? [
   { id: 'sys_001', name: 'Credit Scoring Model', risk: 'High Risk', checklist: buildChecklist() },
   {
     id: 'sys_003', name: 'Resume Screening AI', risk: 'High Risk',
@@ -125,7 +126,7 @@ const systemsList: SystemAssessment[] = [
       evidenceIds: [],
     })),
   },
-];
+] : [];
 
 /* ─── Status Config ─── */
 const statusConfig: Record<ComplianceStatus, { label: string; color: string; bg: string; border: string }> = {
@@ -138,14 +139,14 @@ const statusConfig: Record<ComplianceStatus, { label: string; color: string; bg:
 /* ─── Component ─── */
 export default function ConformityPage() {
   const [systems, setSystems] = useState<SystemAssessment[]>(systemsList);
-  const [selectedSystemId, setSelectedSystemId] = useState<string>(systems[0].id);
+  const [selectedSystemId, setSelectedSystemId] = useState<string>(systems[0]?.id ?? '');
   const [evidenceModalItem, setEvidenceModalItem] = useState<string | null>(null);
   const [notesEditItem, setNotesEditItem] = useState<string | null>(null);
   const [notesEditValue, setNotesEditValue] = useState('');
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
 
-  const selectedSystem = systems.find((s) => s.id === selectedSystemId)!;
-  const checklist = selectedSystem.checklist;
+  const selectedSystem = systems.find((s) => s.id === selectedSystemId);
+  const checklist = selectedSystem?.checklist ?? [];
 
   /* ─── Grouped checklist ─── */
   const groups = useMemo(() => {
@@ -295,7 +296,7 @@ export default function ConformityPage() {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
           <div>
             <h2 style={{ fontSize: 16, fontWeight: 700, color: '#0F172A', margin: 0 }}>
-              {selectedSystem.name} — Compliance Checklist
+              {selectedSystem?.name ?? 'No System Selected'} — Compliance Checklist
             </h2>
             <div style={{ fontSize: 12, color: '#94A3B8', marginTop: 4 }}>
               EU AI Act high-risk system requirements (Articles 9-15)

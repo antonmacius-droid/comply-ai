@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
+import { DEMO_MODE } from '@/lib/demo-data';
 
 /* ─── Annex IV Section Definitions ─── */
 type SectionStatus = 'empty' | 'draft' | 'complete';
@@ -117,7 +118,7 @@ interface DocumentRecord {
   sections: AnnexSection[];
 }
 
-const initialDocuments: DocumentRecord[] = [
+const initialDocuments: DocumentRecord[] = DEMO_MODE ? [
   {
     id: 'doc_001',
     title: 'Annex IV Technical Documentation',
@@ -164,15 +165,15 @@ const initialDocuments: DocumentRecord[] = [
         : s
     ),
   },
-];
+] : [];
 
-const mockSystems = [
+const mockSystems = DEMO_MODE ? [
   { value: 'sys_001', label: 'Credit Scoring Model' },
   { value: 'sys_002', label: 'Customer Support Chatbot' },
   { value: 'sys_003', label: 'Resume Screening AI' },
   { value: 'sys_004', label: 'Fraud Detection System' },
   { value: 'sys_005', label: 'Document Summarizer' },
-];
+] : [];
 
 /* ─── Status helpers ─── */
 const statusBadge: Record<SectionStatus, { variant: 'default' | 'warning' | 'success'; label: string }> = {
