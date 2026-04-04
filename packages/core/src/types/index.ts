@@ -1,0 +1,15 @@
+export type {
+  RiskLevel,
+  AnnexIIICategory,
+  ProhibitedPractice,
+  SystemStatus,
+  DocumentType,
+  EvidenceType,
+  GPAITier,
+  ConformityAssessmentType,
+  IncidentSeverity,
+  AISystemMetadata,
+  RiskAssessmentResult,
+  ComplianceDocument,
+  IncidentRecord,
+} from "./eu-ai-act.js";

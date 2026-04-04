@@ -1,0 +1,42 @@
+name: 'Comply AI Check'
+description: 'EU AI Act compliance check for AI systems. Runs against a Comply AI server and fails the build if compliance checks fail.'
+author: 'AFKzona Group'
+
+branding:
+  icon: 'shield'
+  color: 'blue'
+
+inputs:
+  server:
+    description: 'Comply AI server URL (e.g., https://comply.yourcompany.com)'
+    required: true
+  api-key:
+    description: 'API key for Comply AI server authentication'
+    required: true
+  system-id:
+    description: 'AI system ID to run compliance checks against'
+    required: true
+  fail-on-warning:
+    description: 'Fail the check if warnings are found (default: false)'
+    required: false
+    default: 'false'
+  timeout:
+    description: 'Request timeout in milliseconds (default: 30000)'
+    required: false
+    default: '30000'
+
+outputs:
+  status:
+    description: 'Compliance check result: pass, fail, or warning'
+  risk-level:
+    description: 'Risk level of the AI system'
+  checks-passed:
+    description: 'Number of checks that passed'
+  checks-failed:
+    description: 'Number of checks that failed'
+  checks-warning:
+    description: 'Number of checks with warnings'
+
+runs:
+  using: 'node20'
+  main: 'dist/index.js'

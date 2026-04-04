@@ -1,0 +1,32 @@
+{
+  "name": "@comply-ai/ci",
+  "version": "0.1.0",
+  "description": "CI/CD templates for EU AI Act compliance checks — GitHub Actions, GitLab CI",
+  "license": "MIT",
+  "type": "module",
+  "files": [
+    "github-actions",
+    "gitlab-ci",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf github-actions/comply-check/dist"
+  },
+  "devDependencies": {
+    "@actions/core": "^1.10.0",
+    "@actions/exec": "^1.1.1",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.4.0",
+    "esbuild": "^0.24.0"
+  },
+  "keywords": [
+    "eu-ai-act",
+    "compliance",
+    "github-actions",
+    "gitlab-ci",
+    "ci-cd"
+  ]
+}

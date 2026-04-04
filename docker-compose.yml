@@ -1,0 +1,87 @@
+version: "3.9"
+
+services:
+  comply-web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: comply-web
+    ports:
+      - "3300:3300"
+    environment:
+      - DATABASE_URL=postgres://comply:comply@postgres:5432/complyai
+      - REDIS_URL=redis://redis:6379
+      - NEXTAUTH_URL=http://localhost:3300
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+      - NODE_ENV=production
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - comply-net
+
+  comply-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: comply-worker
+    command: ["node", "packages/web/worker.js"]
+    environment:
+      - DATABASE_URL=postgres://comply:comply@postgres:5432/complyai
+      - REDIS_URL=redis://redis:6379
+      - NODE_ENV=production
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - comply-net
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: comply-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=comply
+      - POSTGRES_PASSWORD=comply
+      - POSTGRES_DB=complyai
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U comply -d complyai"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - comply-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: comply-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - comply-net
+
+volumes:
+  pgdata:
+  redisdata:
+
+networks:
+  comply-net:
+    driver: bridge

@@ -1,0 +1,87 @@
+# Comply AI — GitLab CI Template
+# EU AI Act compliance check for AI systems
+#
+# Usage in your .gitlab-ci.yml:
+#
+#   include:
+#     - remote: 'https://raw.githubusercontent.com/comply-ai/ci/main/gitlab-ci/comply-check.yml'
+#
+#   comply-check:
+#     extends: .comply-ai-check
+#     variables:
+#       COMPLY_AI_SERVER: $COMPLY_AI_SERVER
+#       COMPLY_AI_API_KEY: $COMPLY_AI_API_KEY
+#       COMPLY_AI_SYSTEM_ID: sys_abc123
+
+.comply-ai-check:
+  image: node:22-alpine
+  stage: test
+  variables:
+    COMPLY_AI_SERVER: ""
+    COMPLY_AI_API_KEY: ""
+    COMPLY_AI_SYSTEM_ID: ""
+    COMPLY_AI_FAIL_ON_WARNING: "false"
+    COMPLY_AI_TIMEOUT: "30"
+  script:
+    - |
+      if [ -z "$COMPLY_AI_SERVER" ]; then
+        echo "Error: COMPLY_AI_SERVER is not set"
+        exit 1
+      fi
+      if [ -z "$COMPLY_AI_API_KEY" ]; then
+        echo "Error: COMPLY_AI_API_KEY is not set"
+        exit 1
+      fi
+      if [ -z "$COMPLY_AI_SYSTEM_ID" ]; then
+        echo "Error: COMPLY_AI_SYSTEM_ID is not set"
+        exit 1
+      fi
+
+      echo "Running EU AI Act compliance check..."
+      echo "Server: $COMPLY_AI_SERVER"
+      echo "System: $COMPLY_AI_SYSTEM_ID"
+      echo ""
+
+      RESPONSE=$(wget -q -O - \
+        --timeout="$COMPLY_AI_TIMEOUT" \
+        --header="Authorization: Bearer $COMPLY_AI_API_KEY" \
+        --header="Content-Type: application/json" \
+        --header="User-Agent: comply-ai-gitlab-ci/0.1.0" \
+        "${COMPLY_AI_SERVER}/api/v1/compliance/check?system_id=${COMPLY_AI_SYSTEM_ID}" \
+        2>&1) || {
+          echo "Error: Failed to connect to Comply AI server"
+          echo "$RESPONSE"
+          exit 1
+        }
+
+      STATUS=$(echo "$RESPONSE" | grep -o '"status":"[^"]*"' | head -1 | cut -d'"' -f4)
+      RISK_LEVEL=$(echo "$RESPONSE" | grep -o '"riskLevel":"[^"]*"' | head -1 | cut -d'"' -f4)
+
+      echo "Risk Level: $RISK_LEVEL"
+      echo "Status: $STATUS"
+      echo ""
+
+      # Pretty print if jq is available
+      if command -v jq &> /dev/null; then
+        echo "$RESPONSE" | jq '.checks[] | "\(.status | ascii_upcase)  \(.name): \(.message)"' -r 2>/dev/null || echo "$RESPONSE"
+      else
+        echo "$RESPONSE"
+      fi
+
+      echo ""
+
+      if [ "$STATUS" = "fail" ]; then
+        echo "FAILED: Compliance checks failed for system $COMPLY_AI_SYSTEM_ID"
+        exit 1
+      fi
+
+      if [ "$STATUS" = "warning" ] && [ "$COMPLY_AI_FAIL_ON_WARNING" = "true" ]; then
+        echo "FAILED: Compliance checks have warnings and fail-on-warning is enabled"
+        exit 1
+      fi
+
+      echo "Compliance checks passed."
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  allow_failure: false
