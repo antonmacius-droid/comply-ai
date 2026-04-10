@@ -6,7 +6,7 @@ If you discover a security vulnerability in Comply AI, please report it responsi
 
 **Do NOT open a public GitHub issue for security vulnerabilities.**
 
-Email: **security@afkzonagroup.lt**
+Email: **info@afkzonagroup.lt**
 
 We will acknowledge receipt within 48 hours.
 
