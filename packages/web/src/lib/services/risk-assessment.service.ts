@@ -12,6 +12,9 @@ import {
   type RiskLevel,
   type ProhibitedPractice,
 } from "@comply-ai/core";
+import { eq, and, desc } from "drizzle-orm";
+import { db, isDbConnected } from "@/lib/db";
+import { riskAssessments as raTable } from "@/lib/db/schema";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -66,7 +69,7 @@ export interface CreateAssessmentInput {
 }
 
 // ---------------------------------------------------------------------------
-// In-memory store (replace with Drizzle table queries)
+// In-memory store (fallback when Postgres is not connected)
 // ---------------------------------------------------------------------------
 
 const assessments: RiskAssessment[] = [];
@@ -80,13 +83,42 @@ function now(): string {
 }
 
 // ---------------------------------------------------------------------------
+// DB ↔ Service type mapping helpers
+// ---------------------------------------------------------------------------
+
+type DbAssessmentRow = typeof raTable.$inferSelect;
+
+function dbRowToAssessment(row: DbAssessmentRow): RiskAssessment {
+  const scores = (row.scores ?? {}) as Record<string, unknown>;
+  return {
+    id: row.id,
+    systemId: row.systemId,
+    status: row.status as AssessmentStatus,
+    input: (scores.input as ClassificationInput) ?? ({} as ClassificationInput),
+    result: (scores.result as ClassificationResult) ?? ({} as ClassificationResult),
+    riskLevel: row.riskLevel as RiskLevel,
+    confidence: (scores.confidence as number) ?? 0,
+    rationale: ((scores.rationale as string[]) ?? []),
+    prohibitedPractices: ((scores.prohibitedPractices as ProhibitedPractice[]) ?? []),
+    applicableArticles: ((scores.applicableArticles as string[]) ?? []),
+    requirements: ((scores.requirements as string[]) ?? []),
+    warnings: ((scores.warnings as string[]) ?? []),
+    submittedAt: (scores.submittedAt as string) ?? undefined,
+    approvedBy: (scores.approvedBy as string) ?? undefined,
+    approvedAt: (scores.approvedAt as string) ?? undefined,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.createdAt.toISOString(), // DB has no updatedAt, use createdAt
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Service functions
 // ---------------------------------------------------------------------------
 
-export function createAssessment(
+export async function createAssessment(
   systemId: string,
   input: CreateAssessmentInput
-): RiskAssessment {
+): Promise<RiskAssessment> {
   const classificationInput: ClassificationInput = {
     name: input.name,
     description: input.description,
@@ -113,7 +145,37 @@ export function createAssessment(
     hasLawEnforcementExemption: input.hasLawEnforcementExemption,
   };
 
+  // Always run the core classification engine
   const result = classifyRisk(classificationInput);
+
+  // ── Drizzle path ──
+  if (isDbConnected() && db) {
+    const scores = {
+      input: classificationInput,
+      result,
+      confidence: result.confidence,
+      rationale: result.rationale,
+      prohibitedPractices: result.prohibitedPractices,
+      applicableArticles: result.applicableArticles,
+      requirements: result.requirements,
+      warnings: result.warnings,
+    };
+
+    const [row] = await db
+      .insert(raTable)
+      .values({
+        systemId,
+        riskLevel: result.riskLevel as "unacceptable" | "high" | "limited" | "minimal" | "gpai",
+        annexIiiCategory: classificationInput.category ?? null,
+        scores,
+        status: "draft",
+      })
+      .returning();
+
+    return dbRowToAssessment(row!);
+  }
+
+  // ── In-memory fallback ──
   const timestamp = now();
 
   const assessment: RiskAssessment = {
@@ -137,11 +199,32 @@ export function createAssessment(
   return assessment;
 }
 
-export function getAssessment(id: string): RiskAssessment | null {
+export async function getAssessment(id: string): Promise<RiskAssessment | null> {
+  // ── Drizzle path ──
+  if (isDbConnected() && db) {
+    const row = await db.query.riskAssessments.findFirst({
+      where: eq(raTable.id, id),
+    });
+    return row ? dbRowToAssessment(row) : null;
+  }
+
+  // ── In-memory fallback ──
   return assessments.find((a) => a.id === id) ?? null;
 }
 
-export function listAssessments(systemId?: string): RiskAssessment[] {
+export async function listAssessments(systemId?: string): Promise<RiskAssessment[]> {
+  // ── Drizzle path ──
+  if (isDbConnected() && db) {
+    const conditions = systemId ? [eq(raTable.systemId, systemId)] : [];
+    const rows = await db
+      .select()
+      .from(raTable)
+      .where(conditions.length ? and(...conditions) : undefined)
+      .orderBy(desc(raTable.createdAt));
+    return rows.map(dbRowToAssessment);
+  }
+
+  // ── In-memory fallback ──
   const result = systemId
     ? assessments.filter((a) => a.systemId === systemId)
     : [...assessments];
@@ -151,7 +234,31 @@ export function listAssessments(systemId?: string): RiskAssessment[] {
   );
 }
 
-export function submitAssessment(id: string): RiskAssessment | null {
+export async function submitAssessment(id: string): Promise<RiskAssessment | null> {
+  // ── Drizzle path ──
+  if (isDbConnected() && db) {
+    const existing = await db.query.riskAssessments.findFirst({
+      where: eq(raTable.id, id),
+    });
+    if (!existing) return null;
+    if (existing.status !== "draft") {
+      throw new Error(`Cannot submit assessment in '${existing.status}' status — must be 'draft'`);
+    }
+
+    const oldScores = (existing.scores ?? {}) as Record<string, unknown>;
+    const [row] = await db
+      .update(raTable)
+      .set({
+        status: "submitted",
+        scores: { ...oldScores, submittedAt: now() },
+      })
+      .where(eq(raTable.id, id))
+      .returning();
+
+    return row ? dbRowToAssessment(row) : null;
+  }
+
+  // ── In-memory fallback ──
   const idx = assessments.findIndex((a) => a.id === id);
   if (idx === -1) return null;
 
@@ -171,10 +278,37 @@ export function submitAssessment(id: string): RiskAssessment | null {
   return updated;
 }
 
-export function approveAssessment(
+export async function approveAssessment(
   id: string,
   approverId: string
-): RiskAssessment | null {
+): Promise<RiskAssessment | null> {
+  // ── Drizzle path ──
+  if (isDbConnected() && db) {
+    const existing = await db.query.riskAssessments.findFirst({
+      where: eq(raTable.id, id),
+    });
+    if (!existing) return null;
+    if (existing.status !== "submitted") {
+      throw new Error(
+        `Cannot approve assessment in '${existing.status}' status — must be 'submitted'`
+      );
+    }
+
+    const oldScores = (existing.scores ?? {}) as Record<string, unknown>;
+    const [row] = await db
+      .update(raTable)
+      .set({
+        status: "approved",
+        assessorId: approverId,
+        scores: { ...oldScores, approvedBy: approverId, approvedAt: now() },
+      })
+      .where(eq(raTable.id, id))
+      .returning();
+
+    return row ? dbRowToAssessment(row) : null;
+  }
+
+  // ── In-memory fallback ──
   const idx = assessments.findIndex((a) => a.id === id);
   if (idx === -1) return null;
 

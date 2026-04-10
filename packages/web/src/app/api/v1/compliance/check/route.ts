@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
 
     // Try to look up the system dynamically
     if (systemId) {
-      const system = getSystem(systemId, orgId);
+      const system = await getSystem(systemId, orgId);
       if (system) {
         systemName = system.name;
       }
@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
     const results: CheckResult[] = [];
 
     // Risk assessment check
-    const assessments = systemId ? listAssessments(systemId) : [];
+    const assessments = systemId ? await listAssessments(systemId) : [];
     if (assessments.length > 0) {
       const latest = assessments[0]!;
       results.push({
@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Technical documentation check
-    const docs = systemId ? listDocuments(systemId) : [];
+    const docs = systemId ? await listDocuments(systemId) : [];
     if (docs.length > 0) {
       const completedSections = docs[0]!.sections.filter((s) => s.content.trim().length > 0).length;
       const totalSections = docs[0]!.sections.length;
@@ -123,7 +123,7 @@ export async function POST(request: NextRequest) {
     });
 
     // Evidence check
-    const evidence = systemId ? listEvidence(systemId) : [];
+    const evidence = systemId ? await listEvidence(systemId) : [];
     if (evidence.length > 0) {
       results.push({
         check: 'evidence',

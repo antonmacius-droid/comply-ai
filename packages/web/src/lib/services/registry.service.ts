@@ -14,6 +14,9 @@ import {
   GPAITierSchema,
 } from "@comply-ai/core";
 import type { RiskLevel, SystemStatus, AnnexIIICategory, GPAITier } from "@comply-ai/core";
+import { eq, and, desc, like, or } from "drizzle-orm";
+import { db, isDbConnected } from "@/lib/db";
+import { aiSystems } from "@/lib/db/schema";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -63,7 +66,7 @@ export interface ListSystemsFilter {
 }
 
 // ---------------------------------------------------------------------------
-// In-memory store (replace with Drizzle table queries)
+// In-memory store (fallback when Postgres is not connected)
 // ---------------------------------------------------------------------------
 
 const systems: AISystem[] = [];
@@ -77,10 +80,78 @@ function now(): string {
 }
 
 // ---------------------------------------------------------------------------
+// DB ↔ Service type mapping helpers
+// ---------------------------------------------------------------------------
+
+type DbRow = typeof aiSystems.$inferSelect;
+
+function dbRowToSystem(row: DbRow): AISystem {
+  const meta = (row.metadata ?? {}) as Record<string, unknown>;
+  return {
+    id: row.id,
+    orgId: row.orgId,
+    name: row.name,
+    version: (meta.version as string) ?? "1.0.0",
+    provider: row.providerType ?? "",
+    description: row.description ?? "",
+    purpose: row.purpose ?? "",
+    status: row.status as SystemStatus,
+    riskLevel: row.riskLevel as RiskLevel | undefined,
+    annexIIICategory: (meta.annexIIICategory as AnnexIIICategory) ?? undefined,
+    gpaiTier: (meta.gpaiTier as GPAITier) ?? undefined,
+    deployers: (meta.deployers as string[]) ?? [],
+    tags: (meta.tags as string[]) ?? [],
+    deleted: row.status === "archived",
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Service functions
 // ---------------------------------------------------------------------------
 
-export function listSystems(orgId: string, filter?: ListSystemsFilter): AISystem[] {
+export async function listSystems(orgId: string, filter?: ListSystemsFilter): Promise<AISystem[]> {
+  // ── Drizzle path ──
+  if (isDbConnected() && db) {
+    const conditions = [
+      eq(aiSystems.orgId, orgId),
+    ];
+
+    // Exclude archived (soft-deleted) unless explicitly filtering for archived
+    if (filter?.status) {
+      conditions.push(eq(aiSystems.status, filter.status as "draft" | "active" | "archived"));
+    } else {
+      // By default hide archived
+      conditions.push(
+        or(eq(aiSystems.status, "draft"), eq(aiSystems.status, "active"))!
+      );
+    }
+
+    if (filter?.riskLevel) {
+      conditions.push(eq(aiSystems.riskLevel, filter.riskLevel as "unacceptable" | "high" | "limited" | "minimal" | "gpai"));
+    }
+
+    let rows = await db
+      .select()
+      .from(aiSystems)
+      .where(and(...conditions))
+      .orderBy(desc(aiSystems.updatedAt));
+
+    if (filter?.search) {
+      const q = filter.search.toLowerCase();
+      rows = rows.filter(
+        (r) =>
+          r.name.toLowerCase().includes(q) ||
+          (r.description ?? "").toLowerCase().includes(q) ||
+          (r.providerType ?? "").toLowerCase().includes(q)
+      );
+    }
+
+    return rows.map(dbRowToSystem);
+  }
+
+  // ── In-memory fallback ──
   let result = systems.filter((s) => s.orgId === orgId && !s.deleted);
 
   if (filter?.status) {
@@ -104,13 +175,52 @@ export function listSystems(orgId: string, filter?: ListSystemsFilter): AISystem
   );
 }
 
-export function getSystem(id: string, orgId: string): AISystem | null {
+export async function getSystem(id: string, orgId: string): Promise<AISystem | null> {
+  // ── Drizzle path ──
+  if (isDbConnected() && db) {
+    const row = await db.query.aiSystems.findFirst({
+      where: and(eq(aiSystems.id, id), eq(aiSystems.orgId, orgId)),
+    });
+    if (!row || row.status === "archived") return null;
+    return dbRowToSystem(row);
+  }
+
+  // ── In-memory fallback ──
   const system = systems.find((s) => s.id === id && s.orgId === orgId && !s.deleted);
   return system ?? null;
 }
 
-export function createSystem(data: CreateSystemInput, orgId: string): AISystem {
+export async function createSystem(data: CreateSystemInput, orgId: string): Promise<AISystem> {
   const validated = CreateSystemSchema.parse(data);
+
+  // ── Drizzle path ──
+  if (isDbConnected() && db) {
+    const metadata = {
+      version: validated.version,
+      deployers: validated.deployers ?? [],
+      tags: validated.tags ?? [],
+      annexIIICategory: validated.annexIIICategory,
+      gpaiTier: validated.gpaiTier,
+    };
+
+    const [row] = await db
+      .insert(aiSystems)
+      .values({
+        orgId,
+        name: validated.name,
+        description: validated.description,
+        purpose: validated.purpose,
+        status: "draft",
+        riskLevel: (validated.riskLevel ?? "minimal") as "unacceptable" | "high" | "limited" | "minimal" | "gpai",
+        providerType: validated.provider,
+        metadata,
+      })
+      .returning();
+
+    return dbRowToSystem(row!);
+  }
+
+  // ── In-memory fallback ──
   const timestamp = now();
 
   const system: AISystem = {
@@ -136,15 +246,54 @@ export function createSystem(data: CreateSystemInput, orgId: string): AISystem {
   return system;
 }
 
-export function updateSystem(
+export async function updateSystem(
   id: string,
   data: UpdateSystemInput,
   orgId: string
-): AISystem | null {
+): Promise<AISystem | null> {
+  const validated = UpdateSystemSchema.parse(data);
+
+  // ── Drizzle path ──
+  if (isDbConnected() && db) {
+    // Fetch current row to merge metadata
+    const existing = await db.query.aiSystems.findFirst({
+      where: and(eq(aiSystems.id, id), eq(aiSystems.orgId, orgId)),
+    });
+    if (!existing || existing.status === "archived") return null;
+
+    const oldMeta = (existing.metadata ?? {}) as Record<string, unknown>;
+    const newMeta = { ...oldMeta };
+
+    // Update metadata-stored fields if provided
+    if (validated.version !== undefined) newMeta.version = validated.version;
+    if (validated.deployers !== undefined) newMeta.deployers = validated.deployers;
+    if (validated.tags !== undefined) newMeta.tags = validated.tags;
+    if (validated.annexIIICategory !== undefined) newMeta.annexIIICategory = validated.annexIIICategory;
+    if (validated.gpaiTier !== undefined) newMeta.gpaiTier = validated.gpaiTier;
+
+    const setValues: Record<string, unknown> = {
+      metadata: newMeta,
+      updatedAt: new Date(),
+    };
+    if (validated.name !== undefined) setValues.name = validated.name;
+    if (validated.description !== undefined) setValues.description = validated.description;
+    if (validated.purpose !== undefined) setValues.purpose = validated.purpose;
+    if (validated.provider !== undefined) setValues.providerType = validated.provider;
+    if (validated.riskLevel !== undefined) setValues.riskLevel = validated.riskLevel;
+
+    const [row] = await db
+      .update(aiSystems)
+      .set(setValues)
+      .where(and(eq(aiSystems.id, id), eq(aiSystems.orgId, orgId)))
+      .returning();
+
+    return row ? dbRowToSystem(row) : null;
+  }
+
+  // ── In-memory fallback ──
   const idx = systems.findIndex((s) => s.id === id && s.orgId === orgId && !s.deleted);
   if (idx === -1) return null;
 
-  const validated = UpdateSystemSchema.parse(data);
   const existing = systems[idx]!;
 
   const updated: AISystem = {
@@ -159,7 +308,18 @@ export function updateSystem(
   return updated;
 }
 
-export function deleteSystem(id: string, orgId: string): boolean {
+export async function deleteSystem(id: string, orgId: string): Promise<boolean> {
+  // ── Drizzle path ── (soft delete via status='archived')
+  if (isDbConnected() && db) {
+    const [row] = await db
+      .update(aiSystems)
+      .set({ status: "archived", updatedAt: new Date() })
+      .where(and(eq(aiSystems.id, id), eq(aiSystems.orgId, orgId)))
+      .returning();
+    return !!row;
+  }
+
+  // ── In-memory fallback ──
   const idx = systems.findIndex((s) => s.id === id && s.orgId === orgId && !s.deleted);
   if (idx === -1) return false;
 

@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const systemId = searchParams.get('systemId');
 
-    const assessments = listAssessments(systemId ?? undefined);
+    const assessments = await listAssessments(systemId ?? undefined);
 
     return NextResponse.json({ data: assessments, total: assessments.length });
   } catch (error) {
@@ -65,7 +65,7 @@ export async function POST(request: NextRequest) {
 
     const { systemId, ...inputData } = parsed.data;
 
-    const assessment = createAssessment(systemId, inputData as CreateAssessmentInput);
+    const assessment = await createAssessment(systemId, inputData as CreateAssessmentInput);
 
     return NextResponse.json({ data: assessment }, { status: 201 });
   } catch (error) {

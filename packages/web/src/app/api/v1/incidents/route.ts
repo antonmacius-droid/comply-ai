@@ -14,11 +14,11 @@ export async function GET(request: NextRequest) {
     const overdueOnly = searchParams.get("overdue") === "true";
 
     if (overdueOnly) {
-      const overdue = getOverdueIncidents();
+      const overdue = await getOverdueIncidents();
       return NextResponse.json({ data: overdue, total: overdue.length });
     }
 
-    const incidents = listIncidents(systemId);
+    const incidents = await listIncidents(systemId);
     return NextResponse.json({ data: incidents, total: incidents.length });
   } catch (error) {
     return NextResponse.json(
@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const incident = createIncident(systemId, {
+    const incident = await createIncident(systemId, {
       severity,
       title,
       description,

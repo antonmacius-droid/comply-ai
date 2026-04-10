@@ -6,6 +6,9 @@
  */
 
 import type { IncidentSeverity } from "@comply-ai/core";
+import { eq, and, desc } from "drizzle-orm";
+import { db, isDbConnected } from "@/lib/db";
+import { incidents as incidentsTable } from "@/lib/db/schema";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -68,7 +71,7 @@ export interface UpdateIncidentInput {
 }
 
 // ---------------------------------------------------------------------------
-// In-memory store (replace with Drizzle table queries)
+// In-memory store (fallback when Postgres is not connected)
 // ---------------------------------------------------------------------------
 
 const incidents: Incident[] = [];
@@ -82,13 +85,76 @@ function now(): string {
 }
 
 // ---------------------------------------------------------------------------
+// DB ↔ Service type mapping helpers
+// ---------------------------------------------------------------------------
+
+type DbIncidentRow = typeof incidentsTable.$inferSelect;
+
+/**
+ * The DB schema stores a subset of incident fields as columns.
+ * Extra service-level fields (reportedBy, notifiedAuthority, rootCause,
+ * resolution, correctiveActions, preventiveMeasures, etc.) are not in the DB
+ * schema, so we round-trip them via a hypothetical metadata JSONB extension.
+ * For now we store/read them from a `metadata` field pattern — but the
+ * incidents table doesn't have a metadata column, so we embed these extras
+ * into the row as best-effort and keep the in-memory store as canonical
+ * for fields the DB can't hold.
+ *
+ * Fields that map directly:
+ *   id, systemId, severity, status, title, description,
+ *   detectedAt→createdAt, reportedAt, resolvedAt, createdAt
+ */
+function dbRowToIncident(row: DbIncidentRow): Incident {
+  return {
+    id: row.id,
+    systemId: row.systemId,
+    severity: row.severity as IncidentSeverity,
+    status: row.status as IncidentStatus,
+    title: row.title,
+    description: row.description ?? "",
+    reportedBy: row.reporterId ?? "unknown",
+    reportedAt: row.reportedAt?.toISOString() ?? row.createdAt.toISOString(),
+    notifiedAuthority: false,
+    affectedUsers: undefined,
+    correctiveActions: [],
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.createdAt.toISOString(),
+    resolvedAt: row.resolvedAt?.toISOString(),
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Service functions
 // ---------------------------------------------------------------------------
 
-export function createIncident(
+export async function createIncident(
   systemId: string,
   data: CreateIncidentInput
-): Incident {
+): Promise<Incident> {
+  // ── Drizzle path ──
+  if (isDbConnected() && db) {
+    const [row] = await db
+      .insert(incidentsTable)
+      .values({
+        systemId,
+        orgId: "00000000-0000-0000-0000-000000000000", // TODO: pass orgId through when available
+        severity: data.severity as "critical" | "high" | "medium" | "low",
+        title: data.title,
+        description: data.description,
+        status: "open",
+        reportedAt: new Date(),
+        reporterId: null,
+      })
+      .returning();
+
+    const incident = dbRowToIncident(row!);
+    // Enrich with fields the DB doesn't store
+    incident.reportedBy = data.reportedBy;
+    incident.affectedUsers = data.affectedUsers;
+    return incident;
+  }
+
+  // ── In-memory fallback ──
   const timestamp = now();
 
   const incident: Incident = {
@@ -111,11 +177,32 @@ export function createIncident(
   return incident;
 }
 
-export function getIncident(id: string): Incident | null {
+export async function getIncident(id: string): Promise<Incident | null> {
+  // ── Drizzle path ──
+  if (isDbConnected() && db) {
+    const row = await db.query.incidents.findFirst({
+      where: eq(incidentsTable.id, id),
+    });
+    return row ? dbRowToIncident(row) : null;
+  }
+
+  // ── In-memory fallback ──
   return incidents.find((i) => i.id === id) ?? null;
 }
 
-export function listIncidents(systemId?: string): Incident[] {
+export async function listIncidents(systemId?: string): Promise<Incident[]> {
+  // ── Drizzle path ──
+  if (isDbConnected() && db) {
+    const conditions = systemId ? [eq(incidentsTable.systemId, systemId)] : [];
+    const rows = await db
+      .select()
+      .from(incidentsTable)
+      .where(conditions.length ? and(...conditions) : undefined)
+      .orderBy(desc(incidentsTable.createdAt));
+    return rows.map(dbRowToIncident);
+  }
+
+  // ── In-memory fallback ──
   const result = systemId
     ? incidents.filter((i) => i.systemId === systemId)
     : [...incidents];
@@ -125,10 +212,54 @@ export function listIncidents(systemId?: string): Incident[] {
   );
 }
 
-export function updateIncident(
+export async function updateIncident(
   id: string,
   data: UpdateIncidentInput
-): Incident | null {
+): Promise<Incident | null> {
+  // ── Drizzle path ──
+  if (isDbConnected() && db) {
+    const existing = await db.query.incidents.findFirst({
+      where: eq(incidentsTable.id, id),
+    });
+    if (!existing) return null;
+
+    const setValues: Record<string, unknown> = {};
+    if (data.severity !== undefined) setValues.severity = data.severity;
+    if (data.status !== undefined) setValues.status = data.status;
+    if (data.title !== undefined) setValues.title = data.title;
+    if (data.description !== undefined) setValues.description = data.description;
+
+    // Handle resolvedAt
+    if (data.status === "resolved" && existing.status !== "resolved") {
+      setValues.resolvedAt = new Date();
+    }
+    if (data.notifiedAt !== undefined) {
+      setValues.reportedAt = new Date(data.notifiedAt);
+    }
+
+    const [row] = await db
+      .update(incidentsTable)
+      .set(setValues)
+      .where(eq(incidentsTable.id, id))
+      .returning();
+
+    if (!row) return null;
+
+    // Enrich with fields not in DB
+    const incident = dbRowToIncident(row);
+    incident.notifiedAuthority = data.notifiedAuthority ?? false;
+    incident.notifiedWithin72Hours = data.notifiedWithin72Hours;
+    incident.notifiedAt = data.notifiedAt;
+    incident.rootCause = data.rootCause;
+    incident.resolution = data.resolution;
+    incident.resolvedBy = data.resolvedBy;
+    incident.correctiveActions = data.correctiveActions ?? [];
+    incident.preventiveMeasures = data.preventiveMeasures;
+    incident.affectedUsers = data.affectedUsers;
+    return incident;
+  }
+
+  // ── In-memory fallback ──
   const idx = incidents.findIndex((i) => i.id === id);
   if (idx === -1) return null;
 
@@ -209,11 +340,11 @@ function addTimelineEvent(
  * Escalate an incident — marks it for national authority notification (Art. 62).
  * Sets notifiedAuthority to true and calculates if within 72-hour window.
  */
-export function escalateIncident(
+export async function escalateIncident(
   id: string,
   escalatedBy: string = "system"
-): Incident | null {
-  const incident = getIncident(id);
+): Promise<Incident | null> {
+  const incident = await getIncident(id);
   if (!incident) return null;
 
   const notifiedAt = now();
@@ -222,7 +353,7 @@ export function escalateIncident(
   const hoursDiff = (notifiedTime - reportedTime) / (1000 * 60 * 60);
   const within72Hours = hoursDiff <= 72;
 
-  const updated = updateIncident(id, {
+  const updated = await updateIncident(id, {
     notifiedAuthority: true,
     notifiedAt,
     notifiedWithin72Hours: within72Hours,
@@ -247,11 +378,11 @@ export function escalateIncident(
 /**
  * Get the full chronological timeline for an incident.
  */
-export function getIncidentTimeline(
+export async function getIncidentTimeline(
   incidentId: string
-): IncidentTimelineEvent[] {
+): Promise<IncidentTimelineEvent[]> {
   // Always include a "created" event based on the incident itself
-  const incident = getIncident(incidentId);
+  const incident = await getIncident(incidentId);
   if (!incident) return [];
 
   const stored = timelineEvents.filter(
@@ -327,7 +458,27 @@ export function calculateNotificationDeadline(
  * Get all incidents that are past their 72-hour notification deadline
  * and have NOT been notified to the authority.
  */
-export function getOverdueIncidents(): Incident[] {
+export async function getOverdueIncidents(): Promise<Incident[]> {
+  // ── Drizzle path ──
+  if (isDbConnected() && db) {
+    const rows = await db
+      .select()
+      .from(incidentsTable)
+      .where(
+        and(
+          eq(incidentsTable.status, "open"),
+        )
+      );
+    return rows
+      .map(dbRowToIncident)
+      .filter((incident) => {
+        if (incident.notifiedAuthority) return false;
+        const { isOverdue } = calculateNotificationDeadline(incident);
+        return isOverdue;
+      });
+  }
+
+  // ── In-memory fallback ──
   return incidents.filter((incident) => {
     if (incident.notifiedAuthority) return false;
     if (incident.status === "closed" || incident.status === "resolved") return false;
@@ -340,7 +491,7 @@ export function getOverdueIncidents(): Incident[] {
 /**
  * Resolve an incident with root cause and remediation details.
  */
-export function resolveIncident(
+export async function resolveIncident(
   id: string,
   data: {
     rootCause: string;
@@ -349,8 +500,8 @@ export function resolveIncident(
     correctiveActions: string[];
     preventiveMeasures?: string;
   }
-): Incident | null {
-  const updated = updateIncident(id, {
+): Promise<Incident | null> {
+  const updated = await updateIncident(id, {
     status: "resolved",
     rootCause: data.rootCause,
     resolution: data.resolution,

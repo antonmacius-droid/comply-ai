@@ -5,8 +5,7 @@ import {
   createSystem,
   type ListSystemsFilter,
 } from '@/lib/services/registry.service';
-
-const orgId = 'default';
+import { getOrgId } from '@/lib/auth-helpers';
 
 // Validation schema for creating an AI system
 const createSystemSchema = z.object({
@@ -35,7 +34,8 @@ export async function GET(request: NextRequest) {
     if (riskLevel) filter.riskLevel = riskLevel;
     if (search) filter.search = search;
 
-    const systems = listSystems(orgId, filter);
+    const orgId = await getOrgId();
+    const systems = await listSystems(orgId, filter);
 
     return NextResponse.json({ data: systems, total: systems.length });
   } catch (error) {
@@ -59,7 +59,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const system = createSystem(
+    const orgId = await getOrgId();
+    const system = await createSystem(
       {
         name: parsed.data.name,
         description: parsed.data.description,

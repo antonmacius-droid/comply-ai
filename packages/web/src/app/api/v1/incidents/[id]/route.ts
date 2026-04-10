@@ -14,13 +14,13 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const incident = getIncident(id);
+    const incident = await getIncident(id);
 
     if (!incident) {
       return NextResponse.json({ error: "Incident not found" }, { status: 404 });
     }
 
-    const timeline = getIncidentTimeline(id);
+    const timeline = await getIncidentTimeline(id);
     const deadline = calculateNotificationDeadline(incident);
 
     return NextResponse.json({
@@ -47,7 +47,7 @@ export async function PUT(
     const { id } = await params;
     const body = await request.json();
 
-    const updated = updateIncident(id, body);
+    const updated = await updateIncident(id, body);
 
     if (!updated) {
       return NextResponse.json({ error: "Incident not found" }, { status: 404 });
@@ -73,7 +73,7 @@ export async function POST(
     const { action, ...data } = body as { action: string; [key: string]: unknown };
 
     if (action === "escalate") {
-      const result = escalateIncident(id, (data.escalatedBy as string) || "system");
+      const result = await escalateIncident(id, (data.escalatedBy as string) || "system");
       if (!result) {
         return NextResponse.json({ error: "Incident not found" }, { status: 404 });
       }

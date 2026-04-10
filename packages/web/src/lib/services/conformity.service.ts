@@ -20,12 +20,12 @@ import {
 // Types
 // ---------------------------------------------------------------------------
 
+/** Matches DB checklist_status enum: pending, compliant, non_compliant, na */
 export type ChecklistItemStatus =
-  | "not_started"
-  | "in_progress"
+  | "pending"
   | "compliant"
   | "non_compliant"
-  | "not_applicable";
+  | "na";
 
 export interface ConformityChecklistItem {
   /** Mirror of the core ChecklistItem.id (e.g. "HR-RMS-01") */
@@ -108,7 +108,7 @@ function coreItemToConformityItem(item: ChecklistItem): ConformityChecklistItem 
     description: item.description,
     mandatory: item.mandatory,
     category: item.category,
-    status: "not_started",
+    status: "pending",
     notes: "",
     linkedEvidenceIds: [],
   };
@@ -231,9 +231,8 @@ export function getProgress(assessmentId: string): ConformityProgress | null {
   const totalItems = items.length;
   const compliant = items.filter((i) => i.status === "compliant").length;
   const nonCompliant = items.filter((i) => i.status === "non_compliant").length;
-  const inProgress = items.filter((i) => i.status === "in_progress").length;
-  const notStarted = items.filter((i) => i.status === "not_started").length;
-  const notApplicable = items.filter((i) => i.status === "not_applicable").length;
+  const notStarted = items.filter((i) => i.status === "pending").length;
+  const notApplicable = items.filter((i) => i.status === "na").length;
 
   // Calculate applicable items (excluding not_applicable)
   const applicableItems = totalItems - notApplicable;
@@ -247,7 +246,7 @@ export function getProgress(assessmentId: string): ConformityProgress | null {
     if (!byArticle[article]) {
       byArticle[article] = { total: 0, compliant: 0, percentage: 0 };
     }
-    if (item.status !== "not_applicable") {
+    if (item.status !== "na") {
       byArticle[article]!.total++;
       if (item.status === "compliant") {
         byArticle[article]!.compliant++;
@@ -267,7 +266,7 @@ export function getProgress(assessmentId: string): ConformityProgress | null {
     totalItems,
     compliant,
     nonCompliant,
-    inProgress,
+    inProgress: 0,
     notStarted,
     notApplicable,
     overallPercentage,

@@ -79,6 +79,14 @@ export const monitoringCheckTypeEnum = pgEnum('monitoring_check_type', [
   'drift',
   'performance',
   'bias',
+  'accuracy_drift',
+  'bias_detection',
+  'performance_degradation',
+  'data_quality',
+  'security_scan',
+  'uptime',
+  'error_rate',
+  'latency',
 ]);
 
 export const monitoringStatusEnum = pgEnum('monitoring_status', [
