@@ -28,7 +28,7 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: comply-worker
-    command: ["node", "packages/web/worker.js"]
+    command: ["npx", "tsx", "packages/web/worker.ts"]
     environment:
       - DATABASE_URL=postgres://comply:comply@postgres:5432/complyai
       - REDIS_URL=redis://redis:6379

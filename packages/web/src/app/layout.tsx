@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { Providers } from '@/components/providers';
 
 export const metadata: Metadata = {
   title: 'Comply AI — EU AI Act Compliance Engine',
@@ -38,7 +39,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           MozOsxFontSmoothing: 'grayscale' as any,
         }}
       >
-        {children}
+        <Providers>{children}</Providers>
       </body>
     </html>
   );
