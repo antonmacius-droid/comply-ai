@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
+import {
+  getDocument,
+  exportDocument,
+} from '@/lib/services/document.service';
 
-// POST /api/v1/documents/:id/export — generate PDF export
+// POST /api/v1/documents/:id/export — generate export
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -8,26 +12,27 @@ export async function POST(
   try {
     const { id } = await params;
 
-    // TODO: In production, this will:
-    // 1. Fetch the document with all sections from DB
-    // 2. Render the document into a PDF using a library like puppeteer or @react-pdf/renderer
-    // 3. Upload the PDF to object storage (S3/R2)
-    // 4. Return a signed download URL
-    //
-    // For now, return a placeholder response with job metadata.
+    const exportResult = exportDocument(id);
 
-    const exportJob = {
-      jobId: 'exp_' + Math.random().toString(36).slice(2, 8),
-      documentId: id,
-      status: 'pending',
-      format: 'pdf',
-      estimatedSize: null,
-      downloadUrl: null,
-      createdAt: new Date().toISOString(),
-      message: 'PDF generation is a placeholder. Full PDF rendering will be implemented in Phase 3 with server-side PDF generation.',
-    };
+    if (!exportResult) {
+      return NextResponse.json(
+        { error: 'Document not found' },
+        { status: 404 }
+      );
+    }
 
-    return NextResponse.json({ data: exportJob }, { status: 202 });
+    return NextResponse.json({
+      data: {
+        documentId: id,
+        status: 'completed',
+        format: exportResult.metadata.format,
+        completionPercentage: exportResult.completionPercentage,
+        totalSections: exportResult.totalSections,
+        completedSections: exportResult.completedSections,
+        exportedAt: exportResult.exportedAt,
+        document: exportResult.document,
+      },
+    }, { status: 202 });
   } catch {
     return NextResponse.json(
       { error: 'Failed to initiate export' },
@@ -36,7 +41,7 @@ export async function POST(
   }
 }
 
-// GET /api/v1/documents/:id/export — check export job status
+// GET /api/v1/documents/:id/export — check export status
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -44,12 +49,28 @@ export async function GET(
   try {
     const { id } = await params;
 
-    // TODO: Check export job status from queue/DB
+    const document = getDocument(id);
+
+    if (!document) {
+      return NextResponse.json(
+        { error: 'Document not found' },
+        { status: 404 }
+      );
+    }
+
+    // Check if an export has been generated (use exportDocument to get stats)
+    const exportResult = exportDocument(id);
+
     return NextResponse.json({
       data: {
         documentId: id,
-        status: 'not_started',
-        message: 'No export job found. Use POST to initiate export.',
+        status: exportResult ? 'available' : 'not_started',
+        completionPercentage: exportResult?.completionPercentage ?? 0,
+        totalSections: exportResult?.totalSections ?? 0,
+        completedSections: exportResult?.completedSections ?? 0,
+        message: exportResult
+          ? `Document ready for export (${exportResult.completionPercentage}% complete)`
+          : 'No export available. Use POST to generate.',
       },
     });
   } catch {

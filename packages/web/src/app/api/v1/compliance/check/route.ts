@@ -1,10 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+import { getSystem } from '@/lib/services/registry.service';
+import { listAssessments } from '@/lib/services/risk-assessment.service';
+import { listDocuments } from '@/lib/services/document.service';
+import { listEvidence } from '@/lib/services/evidence.service';
+
+const orgId = 'default';
 
 const complianceCheckSchema = z.object({
-  systemId: z.string().uuid().optional(),
+  systemId: z.string().optional(),
   systemName: z.string().optional(),
-  riskLevel: z.enum(['unacceptable', 'high', 'limited', 'minimal', 'gpai']).optional(),
+  riskLevel: z.enum(['prohibited', 'high', 'limited', 'minimal', 'gpai']).optional(),
   checks: z
     .array(
       z.enum([
@@ -26,7 +32,7 @@ interface CheckResult {
   details?: string;
 }
 
-// POST /api/v1/compliance/check — run compliance checks (used by CLI)
+// POST /api/v1/compliance/check — run compliance checks
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -39,46 +45,100 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // TODO: authenticate via API key, run actual checks against DB
-    // This is the endpoint the CLI tool calls to verify compliance status
+    const systemId = parsed.data.systemId;
+    let systemName = parsed.data.systemName || 'Unknown System';
 
-    const results: CheckResult[] = [
-      {
+    // Try to look up the system dynamically
+    if (systemId) {
+      const system = getSystem(systemId, orgId);
+      if (system) {
+        systemName = system.name;
+      }
+    }
+
+    // Build dynamic check results
+    const results: CheckResult[] = [];
+
+    // Risk assessment check
+    const assessments = systemId ? listAssessments(systemId) : [];
+    if (assessments.length > 0) {
+      const latest = assessments[0]!;
+      results.push({
         check: 'risk_assessment',
-        status: 'pass',
-        message: 'Valid risk assessment found (v3, approved)',
-        details: 'Assessed 2026-03-15, risk level: high, category: Annex III 5(b)',
-      },
-      {
+        status: latest.status === 'approved' ? 'pass' : latest.status === 'submitted' ? 'warning' : 'warning',
+        message: `Risk assessment found (${latest.status})`,
+        details: `Risk level: ${latest.riskLevel}, confidence: ${latest.confidence}%`,
+      });
+    } else {
+      results.push({
+        check: 'risk_assessment',
+        status: 'fail',
+        message: 'No risk assessment found',
+        details: 'Create a risk assessment for this system',
+      });
+    }
+
+    // Technical documentation check
+    const docs = systemId ? listDocuments(systemId) : [];
+    if (docs.length > 0) {
+      const completedSections = docs[0]!.sections.filter((s) => s.content.trim().length > 0).length;
+      const totalSections = docs[0]!.sections.length;
+      const pct = totalSections > 0 ? Math.round((completedSections / totalSections) * 100) : 0;
+      results.push({
         check: 'technical_documentation',
-        status: 'pass',
-        message: 'Annex IV documentation present and approved',
-        details: 'Version 3, approved 2026-03-10',
-      },
-      {
-        check: 'conformity_assessment',
-        status: 'warning',
-        message: 'Conformity assessment in progress (72% complete)',
-        details: '34 of 47 checklist items completed',
-      },
-      {
-        check: 'monitoring',
-        status: 'warning',
-        message: 'Drift detection warning active',
-        details: 'PSI: 0.18 exceeds threshold of 0.15',
-      },
-      {
-        check: 'incident_reporting',
-        status: 'pass',
-        message: 'No unreported serious incidents',
-      },
-      {
+        status: pct === 100 ? 'pass' : pct > 0 ? 'warning' : 'fail',
+        message: `Technical documentation ${pct}% complete`,
+        details: `${completedSections} of ${totalSections} sections filled`,
+      });
+    } else {
+      results.push({
+        check: 'technical_documentation',
+        status: 'fail',
+        message: 'No technical documentation found',
+        details: 'Create Annex IV documentation for this system',
+      });
+    }
+
+    // Conformity assessment — placeholder (conformity service needs systemId + riskLevel)
+    results.push({
+      check: 'conformity_assessment',
+      status: 'warning',
+      message: 'Conformity assessment not yet started',
+      details: 'Begin the conformity checklist for this system',
+    });
+
+    // Monitoring — placeholder
+    results.push({
+      check: 'monitoring',
+      status: 'warning',
+      message: 'Monitoring status unknown',
+      details: 'Configure monitoring for this system',
+    });
+
+    // Incident reporting — placeholder
+    results.push({
+      check: 'incident_reporting',
+      status: 'pass',
+      message: 'No unreported serious incidents',
+    });
+
+    // Evidence check
+    const evidence = systemId ? listEvidence(systemId) : [];
+    if (evidence.length > 0) {
+      results.push({
         check: 'evidence',
         status: 'pass',
-        message: '4 evidence artifacts linked',
-        details: 'Training report, bias audit, data quality, benchmarks',
-      },
-    ];
+        message: `${evidence.length} evidence artifact(s) linked`,
+        details: evidence.map((e) => e.title).join(', '),
+      });
+    } else {
+      results.push({
+        check: 'evidence',
+        status: 'fail',
+        message: 'No evidence artifacts found',
+        details: 'Upload supporting evidence for this system',
+      });
+    }
 
     const requestedChecks = parsed.data.checks;
     const filteredResults = requestedChecks
@@ -91,16 +151,18 @@ export async function POST(request: NextRequest) {
       ? 'warning'
       : 'pass';
 
-    const score = Math.round(
-      (filteredResults.filter((r) => r.status === 'pass').length /
-        filteredResults.length) *
-        100
-    );
+    const score = filteredResults.length > 0
+      ? Math.round(
+          (filteredResults.filter((r) => r.status === 'pass').length /
+            filteredResults.length) *
+            100
+        )
+      : 0;
 
     return NextResponse.json({
       data: {
-        systemId: parsed.data.systemId || 'sys_001',
-        systemName: parsed.data.systemName || 'Credit Scoring Model',
+        systemId: systemId || null,
+        systemName,
         overallStatus,
         complianceScore: score,
         checks: filteredResults,

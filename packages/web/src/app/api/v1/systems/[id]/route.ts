@@ -1,11 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+import {
+  getSystem,
+  updateSystem,
+  deleteSystem,
+} from '@/lib/services/registry.service';
+
+const orgId = 'default';
 
 const updateSystemSchema = z.object({
   name: z.string().min(1).max(255).optional(),
   description: z.string().optional(),
   purpose: z.string().optional(),
-  riskLevel: z.enum(['unacceptable', 'high', 'limited', 'minimal', 'gpai']).optional(),
+  riskLevel: z.enum(['prohibited', 'high', 'limited', 'minimal', 'gpai']).optional(),
   status: z.enum(['draft', 'active', 'archived']).optional(),
   providerType: z.string().max(128).optional(),
   modelName: z.string().max(255).optional(),
@@ -21,26 +28,14 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
+    const system = getSystem(id, orgId);
 
-    // TODO: authenticate, fetch from DB
-    // const { db } = await import('@/lib/db');
-    // const { aiSystems } = await import('@/lib/db/schema');
-    // const system = await db.query.aiSystems.findFirst({ where: eq(aiSystems.id, id) });
-
-    const system = {
-      id,
-      name: 'Credit Scoring Model',
-      description: 'ML model for automated credit scoring decisions',
-      purpose: 'Automated credit scoring affecting access to financial services',
-      riskLevel: 'high',
-      status: 'active',
-      providerType: 'Internal',
-      modelName: 'XGBoost v3',
-      deploymentType: 'cloud',
-      metadata: {},
-      createdAt: '2025-06-15T00:00:00Z',
-      updatedAt: '2026-03-15T00:00:00Z',
-    };
+    if (!system) {
+      return NextResponse.json(
+        { error: 'System not found' },
+        { status: 404 }
+      );
+    }
 
     return NextResponse.json({ data: system });
   } catch (error) {
@@ -68,16 +63,22 @@ export async function PUT(
       );
     }
 
-    // TODO: authenticate, update in DB
-    // const { db } = await import('@/lib/db');
-    // const { aiSystems } = await import('@/lib/db/schema');
-    // const [updated] = await db.update(aiSystems).set({ ...parsed.data, updatedAt: new Date() }).where(eq(aiSystems.id, id)).returning();
+    // Map route fields to service fields
+    const serviceData: Record<string, unknown> = {};
+    if (parsed.data.name !== undefined) serviceData.name = parsed.data.name;
+    if (parsed.data.description !== undefined) serviceData.description = parsed.data.description;
+    if (parsed.data.purpose !== undefined) serviceData.purpose = parsed.data.purpose;
+    if (parsed.data.riskLevel !== undefined) serviceData.riskLevel = parsed.data.riskLevel;
+    if (parsed.data.providerType !== undefined) serviceData.provider = parsed.data.providerType;
 
-    const system = {
-      id,
-      ...parsed.data,
-      updatedAt: new Date().toISOString(),
-    };
+    const system = updateSystem(id, serviceData, orgId);
+
+    if (!system) {
+      return NextResponse.json(
+        { error: 'System not found' },
+        { status: 404 }
+      );
+    }
 
     return NextResponse.json({ data: system });
   } catch (error) {
@@ -95,11 +96,14 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
+    const deleted = deleteSystem(id, orgId);
 
-    // TODO: authenticate, soft-delete or archive
-    // const { db } = await import('@/lib/db');
-    // const { aiSystems } = await import('@/lib/db/schema');
-    // await db.update(aiSystems).set({ status: 'archived' }).where(eq(aiSystems.id, id));
+    if (!deleted) {
+      return NextResponse.json(
+        { error: 'System not found' },
+        { status: 404 }
+      );
+    }
 
     return NextResponse.json({ data: { id, deleted: true } });
   } catch (error) {
