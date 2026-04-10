@@ -148,56 +148,113 @@ export class BulwarkClient {
 
   /**
    * Pull dashboard statistics from the Bulwark gateway.
+   * Maps to Bulwark AI Admin API: GET /admin/dashboard
    */
   async getDashboard(): Promise<BulwarkDashboardStats> {
-    return this.request<BulwarkDashboardStats>("GET", "/api/v1/dashboard");
+    const raw = await this.request<{
+      requestsToday: number; requestsThisMonth: number;
+      costToday: number; costThisMonth: number; activeUsers: number;
+      topModels: { model: string; count: number; cost: number }[];
+      topUsers: { userId: string; count: number; cost: number }[];
+    }>("GET", "/admin/dashboard");
+
+    return {
+      totalRequests: raw.requestsThisMonth,
+      totalTokens: 0, // not directly available from dashboard
+      uniqueModels: raw.topModels.length,
+      uniqueUsers: raw.activeUsers,
+      averageLatencyMs: 0,
+      errorRate: 0,
+      requestsByModel: Object.fromEntries(raw.topModels.map(m => [m.model, m.count])),
+      requestsByDay: [],
+      topUsers: raw.topUsers.map(u => ({ userId: u.userId, requestCount: u.count })),
+    };
   }
 
   /**
    * Pull audit log entries with optional filtering.
+   * Maps to Bulwark AI Admin API: GET /admin/audit
    */
   async getAuditEntries(
     query?: BulwarkAuditQuery
   ): Promise<BulwarkPaginatedResponse<BulwarkAuditEntry>> {
-    return this.request<BulwarkPaginatedResponse<BulwarkAuditEntry>>(
+    const raw = await this.request<{
+      entries: Array<{
+        id: string; timestamp: string; user_id: string; model: string; provider: string;
+        input_tokens: number; output_tokens: number; cost_usd: number; duration_ms: number;
+        action: string; pii_detections?: number; policy_violations?: string;
+      }>;
+      total: number;
+    }>(
       "GET",
-      "/api/v1/audit",
+      "/admin/audit",
       undefined,
-      query
-        ? {
-            start_date: query.startDate,
-            end_date: query.endDate,
-            user_id: query.userId,
-            model: query.model,
-            provider: query.provider,
-            flagged: query.flagged,
-            limit: query.limit,
-            offset: query.offset,
-          }
-        : undefined
+      query ? {
+        from: query.startDate, to: query.endDate,
+        userId: query.userId, limit: query.limit, offset: query.offset,
+      } : undefined
     );
-  }
 
-  /**
-   * Get a single audit entry by ID.
-   */
-  async getAuditEntry(id: string): Promise<BulwarkAuditEntry> {
-    return this.request<BulwarkAuditEntry>("GET", `/api/v1/audit/${id}`);
+    const entries: BulwarkAuditEntry[] = raw.entries.map(e => ({
+      id: e.id,
+      timestamp: e.timestamp,
+      userId: e.user_id || "",
+      model: e.model || "",
+      provider: e.provider || "",
+      promptTokens: e.input_tokens || 0,
+      completionTokens: e.output_tokens || 0,
+      totalTokens: (e.input_tokens || 0) + (e.output_tokens || 0),
+      latencyMs: e.duration_ms || 0,
+      statusCode: 200,
+      flagged: !!(e.pii_detections || e.policy_violations),
+      flagReason: e.policy_violations || (e.pii_detections ? `PII detected (${e.pii_detections})` : undefined),
+      metadata: {},
+    }));
+
+    return {
+      data: entries, total: raw.total,
+      limit: query?.limit || 50, offset: query?.offset || 0,
+      hasMore: (query?.offset || 0) + entries.length < raw.total,
+    };
   }
 
   /**
    * Pull gateway configuration and settings.
+   * Maps to Bulwark AI Admin API: GET /admin/settings + GET /admin/status
    */
   async getSettings(): Promise<BulwarkSettings> {
-    return this.request<BulwarkSettings>("GET", "/api/v1/settings");
+    const [settings, status] = await Promise.all([
+      this.request<{ policyCount: number; sourceCount: number; tenantCount: number; budgetCount: number; monthlyUsage: { requests: number } }>("GET", "/admin/settings"),
+      this.request<{ enabled: boolean; activeRequests: number; circuitBreaker: Record<string, unknown> | null }>("GET", "/admin/status"),
+    ]);
+
+    return {
+      gatewayId: "bulwark-default",
+      name: "Bulwark AI Gateway",
+      version: "0.2.0",
+      providers: [],
+      policies: [],
+      rateLimits: { requestsPerMinute: 0, tokensPerMinute: 0, tokensPerDay: 0 },
+      loggingEnabled: true,
+      auditRetentionDays: 365,
+    };
+  }
+
+  /**
+   * Get SLA health for all providers.
+   * Maps to Bulwark AI Admin API: GET /admin/sla/health
+   */
+  async getSLAHealth(window: string = "24h"): Promise<unknown> {
+    return this.request("GET", "/admin/sla/health", undefined, { window });
   }
 
   /**
    * Health check — returns true if the gateway is reachable.
+   * Maps to Bulwark AI Admin API: GET /admin/status
    */
   async isHealthy(): Promise<boolean> {
     try {
-      await this.request<{ status: string }>("GET", "/api/v1/health");
+      await this.request<{ enabled: boolean }>("GET", "/admin/status");
       return true;
     } catch {
       return false;

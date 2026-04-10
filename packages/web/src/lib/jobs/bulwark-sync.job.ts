@@ -115,12 +115,26 @@ async function processBulwarkSync(
   data: BulwarkSyncInput
 ): Promise<JobResult<BulwarkSyncOutput>> {
   try {
-    // In production, would use:
-    // const client = new BulwarkClient(connectionUrl, connectionApiKey);
-    // const response = await client.getAuditEntries({ startDate: lastSync });
-    // const entries = response.data;
+    // Try real Bulwark AI connection if configured
+    const bulwarkUrl = process.env.BULWARK_API_URL;
+    const bulwarkKey = process.env.BULWARK_API_KEY;
 
-    const entries = generateMockAuditEntries();
+    let entries: BulwarkAuditEntry[];
+
+    if (bulwarkUrl && bulwarkKey) {
+      // Real Bulwark AI v0.2.0 connection
+      const { BulwarkClient } = await import("../bulwark/client");
+      const client = new BulwarkClient(bulwarkUrl, bulwarkKey);
+      const lastSync = getLastSync(data.connectionId);
+      const response = await client.getAuditEntries({
+        startDate: lastSync?.lastSyncAt,
+        limit: 100,
+      });
+      entries = response.data;
+    } else {
+      // Fallback to mock data when not connected
+      entries = generateMockAuditEntries();
+    }
 
     // Map audit entries to evidence (not persisting yet — just counting)
     const evidenceInputs = entries.map((e) =>
