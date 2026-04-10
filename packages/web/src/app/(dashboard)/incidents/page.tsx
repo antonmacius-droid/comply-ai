@@ -1,13 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, KpiCard } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
-import { DEMO_MODE } from '@/lib/demo-data';
 
 // ---------------------------------------------------------------------------
 // Mock data
@@ -34,92 +33,28 @@ interface MockIncident {
   preventiveMeasures?: string;
 }
 
-const initialIncidents: MockIncident[] = DEMO_MODE ? [
-  {
-    id: '1',
-    title: 'Unexpected score distribution shift',
-    system: 'Credit Scoring Model',
-    systemId: 'sys_001',
-    severity: 'medium',
-    status: 'investigating',
-    detectedAt: '2026-04-02T10:30:00Z',
-    reporter: 'System (Automated)',
-    description: 'Monitoring detected a significant shift in credit score distribution for the 25-35 age group. PSI exceeded threshold of 0.15.',
-    notifiedAuthority: false,
-    affectedUsers: 1200,
-    correctiveActions: [],
-  },
-  {
-    id: '2',
-    title: 'Bias detected in gender-based outcomes',
-    system: 'Resume Screening AI',
-    systemId: 'sys_002',
-    severity: 'high',
-    status: 'open',
-    detectedAt: '2026-04-01T08:00:00Z',
-    reporter: 'Maria L.',
-    description: 'Disparate impact ratio fell below 0.80 for female applicants in engineering roles. This violates internal fairness thresholds and potentially Art. 10 requirements.',
-    notifiedAuthority: false,
-    affectedUsers: 340,
-    correctiveActions: [],
-  },
-  {
-    id: '3',
-    title: 'API latency spike causing timeouts',
-    system: 'Credit Scoring Model',
-    systemId: 'sys_001',
-    severity: 'low',
-    status: 'resolved',
-    detectedAt: '2026-03-15T14:00:00Z',
-    reporter: 'Jan D.',
-    description: 'API response times exceeded 2 seconds for 15 minutes during peak load.',
-    notifiedAuthority: false,
-    rootCause: 'Database connection pool exhaustion during peak hours',
-    resolution: 'Increased connection pool size from 20 to 50 and added circuit breaker',
-    resolvedAt: '2026-03-15T16:30:00Z',
-    resolvedBy: 'Jan D.',
-    correctiveActions: ['Increased connection pool', 'Added circuit breaker pattern', 'Set up auto-scaling for DB connections'],
-    preventiveMeasures: 'Load testing scheduled before each major release',
-  },
-  {
-    id: '4',
-    title: 'Model serving incorrect predictions after update',
-    system: 'Fraud Detection System',
-    systemId: 'sys_003',
-    severity: 'critical',
-    status: 'resolved',
-    detectedAt: '2026-02-20T06:00:00Z',
-    reporter: 'System (Automated)',
-    description: 'False positive rate jumped to 45% after model version 2.3 deployment. Rolled back immediately.',
-    notifiedAuthority: true,
-    notifiedAt: '2026-02-20T08:15:00Z',
-    rootCause: 'Feature schema mismatch between training and serving environments',
-    resolution: 'Rolled back to v2.2, fixed feature pipeline, redeployed v2.3.1 with schema validation',
-    resolvedAt: '2026-02-20T14:00:00Z',
-    resolvedBy: 'Anton K.',
-    affectedUsers: 5600,
-    correctiveActions: ['Rollback to v2.2', 'Schema validation added to CI/CD', 'Shadow deployment testing mandatory'],
-    preventiveMeasures: 'All model deployments require shadow testing for 24h before promotion',
-  },
-  {
-    id: '5',
-    title: 'Data pipeline failure — stale features',
-    system: 'Recommendation Engine',
-    systemId: 'sys_004',
-    severity: 'medium',
-    status: 'closed',
-    detectedAt: '2026-02-10T03:00:00Z',
-    reporter: 'Anton K.',
-    description: 'Feature store pipeline failed causing 6h of stale feature data in recommendations.',
-    notifiedAuthority: false,
-    rootCause: 'Upstream data provider changed API response format without notice',
-    resolution: 'Added schema validation on ingest, implemented fallback to cached features',
-    resolvedAt: '2026-02-10T09:00:00Z',
-    resolvedBy: 'Anton K.',
-    correctiveActions: ['Schema validation on data ingest', 'Fallback to cached features', 'Alerting on data freshness'],
-    preventiveMeasures: 'Weekly API contract checks with upstream providers',
-  },
-] : [];
+function mapApiIncident(inc: Record<string, unknown>): MockIncident {
+  return {
+    id: inc.id as string,
+    title: (inc.title as string) || 'Incident',
+    system: (inc.systemName as string) || (inc.systemId as string) || '-',
+    systemId: (inc.systemId as string) || '',
+    severity: (inc.severity as MockIncident['severity']) || 'medium',
+    status: (inc.status as MockIncident['status']) || 'open',
+    detectedAt: (inc.reportedAt as string) || (inc.createdAt as string) || new Date().toISOString(),
+    reporter: (inc.reportedBy as string) || '-',
+    description: (inc.description as string) || '',
+    notifiedAuthority: (inc.notifiedAuthority as boolean) || false,
+    notifiedAt: inc.notifiedAt as string | undefined,
+    rootCause: inc.rootCause as string | undefined,
+    resolution: inc.resolution as string | undefined,
+    resolvedAt: inc.resolvedAt as string | undefined,
+    resolvedBy: inc.resolvedBy as string | undefined,
+    affectedUsers: inc.affectedUsers as number | undefined,
+    correctiveActions: (inc.correctiveActions as string[]) || [],
+    preventiveMeasures: inc.preventiveMeasures as string | undefined,
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Timeline generation
@@ -238,18 +173,58 @@ const timelineColors: Record<string, { bg: string; border: string; icon: string 
 // ---------------------------------------------------------------------------
 
 export default function IncidentsPage() {
-  const [incidents, setIncidents] = useState(initialIncidents);
+  const [incidents, setIncidents] = useState<MockIncident[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showReport, setShowReport] = useState(false);
   const [showEscalateConfirm, setShowEscalateConfirm] = useState(false);
   const [showResolveForm, setShowResolveForm] = useState(false);
   const [, setTick] = useState(0);
+  const [loadingIncidents, setLoadingIncidents] = useState(true);
+  const [systemOptions, setSystemOptions] = useState<Array<{ value: string; label: string }>>([]);
+
+  // Report form state
+  const [reportTitle, setReportTitle] = useState('');
+  const [reportSystem, setReportSystem] = useState('');
+  const [reportSeverity, setReportSeverity] = useState('');
+  const [reportDescription, setReportDescription] = useState('');
+  const [reportSubmitting, setReportSubmitting] = useState(false);
 
   // Resolve form state
   const [resolveRootCause, setResolveRootCause] = useState('');
   const [resolveResolution, setResolveResolution] = useState('');
   const [resolveActions, setResolveActions] = useState('');
   const [resolvePreventive, setResolvePreventive] = useState('');
+
+  // Fetch systems for dropdown
+  useEffect(() => {
+    fetch('/api/v1/systems')
+      .then((r) => r.json())
+      .then((json) => {
+        const opts = ((json.data || []) as Array<Record<string, unknown>>).map((s) => ({
+          value: s.id as string,
+          label: s.name as string,
+        }));
+        setSystemOptions(opts);
+      })
+      .catch(() => {});
+  }, []);
+
+  // Fetch incidents from API
+  const fetchIncidents = useCallback(() => {
+    setLoadingIncidents(true);
+    fetch('/api/v1/incidents')
+      .then((r) => r.json())
+      .then((json) => {
+        const items = ((json.data || []) as Array<Record<string, unknown>>).map(mapApiIncident);
+        setIncidents(items);
+      })
+      .catch(() => {})
+      .finally(() => setLoadingIncidents(false));
+  }, []);
+
+  useEffect(() => {
+    fetchIncidents();
+  }, [fetchIncidents]);
 
   // Tick every minute for countdown
   useEffect(() => {
@@ -318,6 +293,12 @@ export default function IncidentsPage() {
         </div>
         <Button variant="danger" onClick={() => setShowReport(true)}>Report Incident</Button>
       </div>
+
+      {loadingIncidents && (
+        <div style={{ textAlign: 'center', padding: '48px 0', color: '#64748B', fontSize: 14 }}>
+          Loading incidents...
+        </div>
+      )}
 
       {/* KPIs */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 32 }}>
@@ -686,20 +667,19 @@ export default function IncidentsPage() {
 
       {/* Report modal */}
       <Modal open={showReport} onClose={() => setShowReport(false)} title="Report New Incident" width={600}>
-        <Input label="Incident Title" placeholder="Brief description of the incident" />
+        <Input label="Incident Title" placeholder="Brief description of the incident" value={reportTitle} onChange={(e) => setReportTitle(e.target.value)} />
         <Select
           label="AI System"
           placeholder="Select affected system"
-          options={[
-            { value: 'sys_001', label: 'Credit Scoring Model' },
-            { value: 'sys_002', label: 'Resume Screening AI' },
-            { value: 'sys_003', label: 'Fraud Detection System' },
-            { value: 'sys_004', label: 'Recommendation Engine' },
-          ]}
+          value={reportSystem}
+          onChange={(e) => setReportSystem(e.target.value)}
+          options={systemOptions}
         />
         <Select
           label="Severity"
           placeholder="Select severity level"
+          value={reportSeverity}
+          onChange={(e) => setReportSeverity(e.target.value)}
           options={[
             { value: 'critical', label: 'Critical — System compromised or causing harm' },
             { value: 'high', label: 'High — Significant compliance risk' },
@@ -707,7 +687,7 @@ export default function IncidentsPage() {
             { value: 'low', label: 'Low — Minor issue, no immediate risk' },
           ]}
         />
-        <Textarea label="Description" placeholder="Detailed description of what happened, when, and potential impact..." />
+        <Textarea label="Description" placeholder="Detailed description of what happened, when, and potential impact..." value={reportDescription} onChange={(e) => setReportDescription(e.target.value)} />
         <div style={{ padding: '10px 14px', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, marginBottom: 16 }}>
           <div style={{ fontSize: 12, fontWeight: 600, color: '#DC2626', marginBottom: 4 }}>
             Reporting Obligation
@@ -718,7 +698,31 @@ export default function IncidentsPage() {
         </div>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
           <Button variant="secondary" onClick={() => setShowReport(false)}>Cancel</Button>
-          <Button variant="danger" onClick={() => setShowReport(false)}>Report Incident</Button>
+          <Button variant="danger" disabled={reportSubmitting || !reportTitle || !reportSystem || !reportSeverity || !reportDescription} onClick={async () => {
+            setReportSubmitting(true);
+            try {
+              const res = await fetch('/api/v1/incidents', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  systemId: reportSystem,
+                  severity: reportSeverity,
+                  title: reportTitle,
+                  description: reportDescription,
+                  reportedBy: 'user',
+                }),
+              });
+              if (res.ok) {
+                setShowReport(false);
+                setReportTitle(''); setReportSystem(''); setReportSeverity(''); setReportDescription('');
+                fetchIncidents();
+              }
+            } catch (err) {
+              console.error('Failed to report incident:', err);
+            } finally {
+              setReportSubmitting(false);
+            }
+          }}>{reportSubmitting ? 'Reporting...' : 'Report Incident'}</Button>
         </div>
       </Modal>
 

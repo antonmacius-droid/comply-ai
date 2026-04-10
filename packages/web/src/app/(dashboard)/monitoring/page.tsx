@@ -1,11 +1,10 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Card, KpiCard } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
-import { DEMO_MODE } from '@/lib/demo-data';
 
 // ---------------------------------------------------------------------------
 // Types & mock data
@@ -76,25 +75,7 @@ function generateChecks(): HealthCell[] {
   });
 }
 
-const initialSystems: SystemMonitor[] = DEMO_MODE ? [
-  { id: 'sys_001', name: 'Credit Scoring Model', lastCheck: '2h ago', checks: generateChecks() },
-  { id: 'sys_002', name: 'Resume Screening AI', lastCheck: '3h ago', checks: generateChecks() },
-  { id: 'sys_003', name: 'Fraud Detection System', lastCheck: '2h ago', checks: generateChecks() },
-  { id: 'sys_004', name: 'Customer Support Chatbot', lastCheck: '1h ago', checks: generateChecks() },
-  { id: 'sys_005', name: 'Recommendation Engine', lastCheck: '4h ago', checks: generateChecks() },
-  { id: 'sys_006', name: 'Document Summarizer', lastCheck: '2h ago', checks: generateChecks() },
-] : [];
-
-const initialRecentChecks: RecentCheck[] = DEMO_MODE ? [
-  { system: 'Credit Scoring Model', systemId: 'sys_001', type: 'Drift', status: 'warning', detail: 'PSI: 0.18 (threshold: 0.15)', score: 68, time: '2026-04-04 14:00', recommendations: ['Review input data distribution', 'Consider model retraining'], metrics: { psi: 0.18, threshold: 0.15 } },
-  { system: 'Document Summarizer', systemId: 'sys_006', type: 'Performance', status: 'warning', detail: 'Latency p99: 4.2s (threshold: 3s)', score: 62, time: '2026-04-04 14:00', recommendations: ['Optimize inference pipeline', 'Consider model distillation'], metrics: { p99_ms: 4200, threshold_ms: 3000 } },
-  { system: 'Fraud Detection System', systemId: 'sys_003', type: 'Bias', status: 'warning', detail: 'DI ratio age group 18-25: 0.78', score: 71, time: '2026-04-04 14:00', recommendations: ['Review model outputs across age groups', 'Fairness-aware retraining'], metrics: { di_ratio: 0.78, threshold: 0.80 } },
-  { system: 'Credit Scoring Model', systemId: 'sys_001', type: 'Performance', status: 'pass', detail: 'AUC: 0.92, F1: 0.87', score: 92, time: '2026-04-04 14:00', recommendations: [], metrics: { auc: 0.92, f1: 0.87 } },
-  { system: 'Resume Screening AI', systemId: 'sys_002', type: 'Drift', status: 'pass', detail: 'PSI: 0.04', score: 96, time: '2026-04-04 10:00', recommendations: [], metrics: { psi: 0.04 } },
-  { system: 'Resume Screening AI', systemId: 'sys_002', type: 'Bias', status: 'pass', detail: 'DI ratio: 0.88 (all groups)', score: 88, time: '2026-04-04 10:00', recommendations: [], metrics: { di_ratio: 0.88 } },
-  { system: 'Customer Support Chatbot', systemId: 'sys_004', type: 'Performance', status: 'pass', detail: 'Avg response: 1.2s', score: 90, time: '2026-04-04 08:00', recommendations: [], metrics: { avg_response_ms: 1200 } },
-  { system: 'Recommendation Engine', systemId: 'sys_005', type: 'Performance', status: 'pass', detail: 'CTR: 4.8%, nDCG: 0.72', score: 85, time: '2026-04-03 14:00', recommendations: [], metrics: { ctr: 4.8, ndcg: 0.72 } },
-] : [];
+// Initial data will be loaded from the systems API
 
 // ---------------------------------------------------------------------------
 // Trend data (last 30 days simulated)
@@ -212,18 +193,53 @@ function TrendChart({ data }: { data: Array<{ day: number; pass: number; warning
 // ---------------------------------------------------------------------------
 
 export default function MonitoringPage() {
-  const [systems, setSystems] = useState(initialSystems);
-  const [recentChecks, setRecentChecks] = useState(initialRecentChecks);
+  const [systems, setSystems] = useState<SystemMonitor[]>([]);
+  const [recentChecks, setRecentChecks] = useState<RecentCheck[]>([]);
   const [expandedCheckIdx, setExpandedCheckIdx] = useState<number | null>(null);
   const [runningCheck, setRunningCheck] = useState<string | null>(null);
   const [showAlerts, setShowAlerts] = useState(false);
   const [thresholds, setThresholds] = useState(defaultThresholds);
+  const [loadingMonitoring, setLoadingMonitoring] = useState(true);
 
   const trendData = useMemo(() => generateTrendData(), []);
 
+  // Fetch systems from API and generate monitoring data
+  useEffect(() => {
+    setLoadingMonitoring(true);
+    fetch('/api/v1/systems')
+      .then((r) => r.json())
+      .then((json) => {
+        const apiSystems = ((json.data || []) as Array<Record<string, unknown>>).map((s) => ({
+          id: s.id as string,
+          name: s.name as string,
+          lastCheck: 'Not checked yet',
+          checks: generateChecks(),
+        }));
+        setSystems(apiSystems);
+        // Generate recent checks from the first few systems
+        const recent: RecentCheck[] = apiSystems.slice(0, 4).flatMap((sys) => {
+          const checks = sys.checks.filter((c) => c.status !== 'pass').slice(0, 1);
+          return checks.map((c) => ({
+            system: sys.name,
+            systemId: sys.id,
+            type: c.checkType,
+            status: c.status,
+            detail: c.detail,
+            score: c.score,
+            time: new Date().toISOString().slice(0, 16).replace('T', ' '),
+            recommendations: c.status === 'warning' ? ['Review and investigate'] : [],
+            metrics: { score: c.score },
+          }));
+        });
+        setRecentChecks(recent);
+      })
+      .catch(() => {})
+      .finally(() => setLoadingMonitoring(false));
+  }, []);
+
   const totalWarnings = systems.reduce((sum, s) => sum + s.checks.filter((c) => c.status === 'warning').length, 0);
   const totalFails = systems.reduce((sum, s) => sum + s.checks.filter((c) => c.status === 'fail').length, 0);
-  const avgScore = Math.round(systems.reduce((sum, s) => sum + s.checks.reduce((cs, c) => cs + c.score, 0) / s.checks.length, 0) / systems.length);
+  const avgScore = systems.length > 0 ? Math.round(systems.reduce((sum, s) => sum + s.checks.reduce((cs, c) => cs + c.score, 0) / s.checks.length, 0) / systems.length) : 0;
 
   function handleRunCheck(systemId: string) {
     setRunningCheck(systemId);
@@ -251,6 +267,12 @@ export default function MonitoringPage() {
         </div>
         <Button variant="secondary" onClick={() => setShowAlerts(true)}>Alert Configuration</Button>
       </div>
+
+      {loadingMonitoring && (
+        <div style={{ textAlign: 'center', padding: '48px 0', color: '#64748B', fontSize: 14 }}>
+          Loading monitoring data...
+        </div>
+      )}
 
       {/* KPIs */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 32 }}>

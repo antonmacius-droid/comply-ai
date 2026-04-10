@@ -1,39 +1,39 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { Card } from '@/components/ui/card';
 import { Badge, RiskBadge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 
-const mockSystem = {
-  id: '1',
-  name: 'Credit Scoring Model',
-  description:
-    'Machine learning model used for automated credit scoring decisions. Evaluates applicant creditworthiness based on financial history, employment data, and behavioral signals.',
-  purpose: 'Automated individual credit scoring affecting access to financial services (Annex III, 5b)',
-  riskLevel: 'high' as const,
-  status: 'active',
-  provider: 'Internal',
-  model: 'XGBoost v3.2',
-  deploymentType: 'Cloud (AWS EU-West-1)',
-  createdAt: '2025-06-15',
-  lastAssessed: '2026-03-15',
-};
+interface SystemData {
+  id: string;
+  name: string;
+  description: string;
+  purpose: string;
+  riskLevel: 'high' | 'limited' | 'minimal' | 'gpai';
+  status: string;
+  provider: string;
+  version: string;
+  deploymentType: string;
+  createdAt: string;
+  updatedAt: string;
+  annexIIICategory?: string;
+}
 
 const tabs = ['Overview', 'Risk Assessment', 'Documents', 'Evidence', 'Monitoring', 'Incidents'];
 
-function OverviewTab() {
+function OverviewTab({ system }: { system: SystemData }) {
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
       <Card>
         <h3 style={{ fontSize: 14, fontWeight: 600, color: '#0F172A', margin: '0 0 16px' }}>System Details</h3>
         {[
-          ['Provider', mockSystem.provider],
-          ['Model', mockSystem.model],
-          ['Deployment', mockSystem.deploymentType],
-          ['Registered', mockSystem.createdAt],
-          ['Last Assessment', mockSystem.lastAssessed],
+          ['Provider', system.provider],
+          ['Version', system.version],
+          ['Deployment', system.deploymentType || '-'],
+          ['Registered', system.createdAt ? new Date(system.createdAt).toLocaleDateString() : '-'],
+          ['Last Updated', system.updatedAt ? new Date(system.updatedAt).toLocaleDateString() : '-'],
         ].map(([label, value]) => (
           <div key={label} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #F1F5F9' }}>
             <span style={{ fontSize: 13, color: '#64748B' }}>{label}</span>
@@ -43,37 +43,49 @@ function OverviewTab() {
       </Card>
       <Card>
         <h3 style={{ fontSize: 14, fontWeight: 600, color: '#0F172A', margin: '0 0 16px' }}>Purpose & Scope</h3>
-        <p style={{ fontSize: 13, color: '#334155', lineHeight: 1.6, margin: 0 }}>{mockSystem.purpose}</p>
-        <div style={{ marginTop: 16, padding: '12px 14px', background: '#FFF7ED', border: '1px solid #FED7AA', borderRadius: 8 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: '#EA580C', marginBottom: 4 }}>Annex III Classification</div>
-          <div style={{ fontSize: 13, color: '#9A3412' }}>Category 5(b) — Credit scoring and creditworthiness assessment</div>
-        </div>
+        <p style={{ fontSize: 13, color: '#334155', lineHeight: 1.6, margin: 0 }}>{system.purpose || system.description}</p>
+        {system.annexIIICategory && (
+          <div style={{ marginTop: 16, padding: '12px 14px', background: '#FFF7ED', border: '1px solid #FED7AA', borderRadius: 8 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: '#EA580C', marginBottom: 4 }}>Annex III Classification</div>
+            <div style={{ fontSize: 13, color: '#9A3412' }}>{system.annexIIICategory}</div>
+          </div>
+        )}
       </Card>
     </div>
   );
 }
 
-function RiskAssessmentTab() {
+function RiskAssessmentTab({ systemId }: { systemId: string }) {
+  const [assessments, setAssessments] = useState<Array<Record<string, unknown>>>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch(`/api/v1/assessments?systemId=${systemId}`)
+      .then((r) => r.json())
+      .then((json) => setAssessments(json.data || []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [systemId]);
+
   return (
     <Card>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
         <h3 style={{ fontSize: 14, fontWeight: 600, color: '#0F172A', margin: 0 }}>Risk Assessments</h3>
         <Button size="sm">+ New Assessment</Button>
       </div>
-      {[
-        { version: 'v3', date: '2026-03-15', assessor: 'Maria L.', status: 'approved', level: 'high' as const },
-        { version: 'v2', date: '2025-11-20', assessor: 'Anton K.', status: 'approved', level: 'high' as const },
-        { version: 'v1', date: '2025-06-15', assessor: 'Jan D.', status: 'approved', level: 'high' as const },
-      ].map((a, i) => (
+      {loading && <div style={{ fontSize: 13, color: '#94A3B8', padding: '12px 0' }}>Loading assessments...</div>}
+      {!loading && assessments.length === 0 && (
+        <div style={{ fontSize: 13, color: '#94A3B8', padding: '12px 0' }}>No assessments found for this system.</div>
+      )}
+      {assessments.map((a, i) => (
         <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 0', borderBottom: '1px solid #F1F5F9' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: '#334155' }}>{a.version}</span>
-            <RiskBadge level={a.level} />
+            <span style={{ fontSize: 13, fontWeight: 600, color: '#334155' }}>{(a.name as string) || `Assessment ${i + 1}`}</span>
+            <RiskBadge level={(a.computedRisk as 'high' | 'limited' | 'minimal' | 'gpai') || 'minimal'} />
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <span style={{ fontSize: 12, color: '#94A3B8' }}>{a.assessor}</span>
-            <span style={{ fontSize: 12, color: '#94A3B8' }}>{a.date}</span>
-            <Badge variant="success">{a.status}</Badge>
+            <span style={{ fontSize: 12, color: '#94A3B8' }}>{a.createdAt ? new Date(a.createdAt as string).toLocaleDateString() : '-'}</span>
+            <Badge variant="success">{(a.status as string) || 'completed'}</Badge>
           </div>
         </div>
       ))}
@@ -81,25 +93,36 @@ function RiskAssessmentTab() {
   );
 }
 
-function DocumentsTab() {
+function DocumentsTab({ systemId }: { systemId: string }) {
+  const [docs, setDocs] = useState<Array<Record<string, unknown>>>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch(`/api/v1/documents?systemId=${systemId}`)
+      .then((r) => r.json())
+      .then((json) => setDocs(json.data || []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [systemId]);
+
   return (
     <Card>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
         <h3 style={{ fontSize: 14, fontWeight: 600, color: '#0F172A', margin: 0 }}>Compliance Documents</h3>
         <Button size="sm">+ Generate Document</Button>
       </div>
-      {[
-        { title: 'Annex IV Technical Documentation', type: 'annex_iv', status: 'approved', date: '2026-03-10' },
-        { title: 'Risk Assessment Report v3', type: 'risk_report', status: 'approved', date: '2026-03-15' },
-        { title: 'Model Card — XGBoost v3.2', type: 'model_card', status: 'review', date: '2026-03-18' },
-      ].map((doc, i) => (
+      {loading && <div style={{ fontSize: 13, color: '#94A3B8', padding: '12px 0' }}>Loading documents...</div>}
+      {!loading && docs.length === 0 && (
+        <div style={{ fontSize: 13, color: '#94A3B8', padding: '12px 0' }}>No documents found for this system.</div>
+      )}
+      {docs.map((doc, i) => (
         <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 0', borderBottom: '1px solid #F1F5F9' }}>
           <div>
-            <div style={{ fontSize: 13, fontWeight: 500, color: '#334155' }}>{doc.title}</div>
-            <div style={{ fontSize: 12, color: '#94A3B8', marginTop: 2 }}>{doc.date}</div>
+            <div style={{ fontSize: 13, fontWeight: 500, color: '#334155' }}>{(doc.title as string) || (doc.type as string) || 'Document'}</div>
+            <div style={{ fontSize: 12, color: '#94A3B8', marginTop: 2 }}>{doc.createdAt ? new Date(doc.createdAt as string).toLocaleDateString() : '-'}</div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Badge variant={doc.status === 'approved' ? 'success' : 'warning'}>{doc.status}</Badge>
+            <Badge variant={(doc.status as string) === 'approved' ? 'success' : 'warning'}>{(doc.status as string) || 'draft'}</Badge>
             <Button variant="ghost" size="sm">Download PDF</Button>
           </div>
         </div>
@@ -108,31 +131,41 @@ function DocumentsTab() {
   );
 }
 
-function EvidenceTab() {
+function EvidenceTab({ systemId }: { systemId: string }) {
+  const [evidence, setEvidence] = useState<Array<Record<string, unknown>>>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch(`/api/v1/evidence?systemId=${systemId}`)
+      .then((r) => r.json())
+      .then((json) => setEvidence(json.data || []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [systemId]);
+
   return (
     <Card>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
         <h3 style={{ fontSize: 14, fontWeight: 600, color: '#0F172A', margin: 0 }}>Evidence Artifacts</h3>
         <Button size="sm">+ Upload Evidence</Button>
       </div>
-      {[
-        { title: 'Model Training Report', type: 'PDF', tags: ['training', 'validation'], date: '2026-03-01' },
-        { title: 'Bias Audit Results Q1 2026', type: 'CSV', tags: ['bias', 'audit'], date: '2026-03-12' },
-        { title: 'Data Quality Assessment', type: 'PDF', tags: ['data', 'quality'], date: '2026-02-28' },
-        { title: 'Performance Benchmarks', type: 'JSON', tags: ['performance'], date: '2026-03-05' },
-      ].map((ev, i) => (
+      {loading && <div style={{ fontSize: 13, color: '#94A3B8', padding: '12px 0' }}>Loading evidence...</div>}
+      {!loading && evidence.length === 0 && (
+        <div style={{ fontSize: 13, color: '#94A3B8', padding: '12px 0' }}>No evidence found for this system.</div>
+      )}
+      {evidence.map((ev, i) => (
         <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 0', borderBottom: '1px solid #F1F5F9' }}>
           <div>
-            <div style={{ fontSize: 13, fontWeight: 500, color: '#334155' }}>{ev.title}</div>
+            <div style={{ fontSize: 13, fontWeight: 500, color: '#334155' }}>{(ev.title as string) || 'Evidence'}</div>
             <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
-              {ev.tags.map((t) => (
+              {((ev.tags as string[]) || []).map((t) => (
                 <span key={t} style={{ fontSize: 10, padding: '1px 6px', background: '#F1F5F9', borderRadius: 4, color: '#64748B' }}>{t}</span>
               ))}
             </div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <Badge variant="default">{ev.type}</Badge>
-            <span style={{ fontSize: 12, color: '#94A3B8' }}>{ev.date}</span>
+            <Badge variant="default">{(ev.type as string) || 'file'}</Badge>
+            <span style={{ fontSize: 12, color: '#94A3B8' }}>{ev.createdAt ? new Date(ev.createdAt as string).toLocaleDateString() : '-'}</span>
           </div>
         </div>
       ))}
@@ -144,55 +177,47 @@ function MonitoringTab() {
   return (
     <Card>
       <h3 style={{ fontSize: 14, fontWeight: 600, color: '#0F172A', margin: '0 0 16px' }}>Monitoring Checks</h3>
-      {[
-        { type: 'Performance', status: 'pass', date: '2026-04-03 14:00', detail: 'AUC: 0.92, F1: 0.87' },
-        { type: 'Drift', status: 'warning', date: '2026-04-03 14:00', detail: 'PSI: 0.18 (threshold: 0.15)' },
-        { type: 'Bias', status: 'pass', date: '2026-04-02 10:00', detail: 'DI ratio: 0.84 (compliant)' },
-        { type: 'Performance', status: 'pass', date: '2026-04-01 14:00', detail: 'AUC: 0.91, F1: 0.86' },
-      ].map((check, i) => (
-        <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 0', borderBottom: '1px solid #F1F5F9' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{
-              width: 8, height: 8, borderRadius: '50%',
-              background: check.status === 'pass' ? '#22C55E' : check.status === 'warning' ? '#EAB308' : '#EF4444',
-            }} />
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 500, color: '#334155' }}>{check.type}</div>
-              <div style={{ fontSize: 12, color: '#94A3B8' }}>{check.detail}</div>
-            </div>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Badge variant={check.status === 'pass' ? 'success' : 'warning'}>{check.status}</Badge>
-            <span style={{ fontSize: 12, color: '#94A3B8' }}>{check.date}</span>
-          </div>
-        </div>
-      ))}
+      <div style={{ fontSize: 13, color: '#94A3B8', padding: '12px 0' }}>
+        Monitoring data is available on the dedicated Monitoring page.
+      </div>
     </Card>
   );
 }
 
-function IncidentsTab() {
+function IncidentsTab({ systemId }: { systemId: string }) {
+  const [incidents, setIncidents] = useState<Array<Record<string, unknown>>>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch(`/api/v1/incidents?systemId=${systemId}`)
+      .then((r) => r.json())
+      .then((json) => setIncidents(json.data || []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [systemId]);
+
   return (
     <Card>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
         <h3 style={{ fontSize: 14, fontWeight: 600, color: '#0F172A', margin: 0 }}>Incidents</h3>
         <Button size="sm" variant="danger">+ Report Incident</Button>
       </div>
-      {[
-        { title: 'Unexpected score distribution shift', severity: 'medium', status: 'investigating', date: '2026-03-28' },
-        { title: 'API latency spike (>2s)', severity: 'low', status: 'resolved', date: '2026-03-15' },
-      ].map((inc, i) => (
+      {loading && <div style={{ fontSize: 13, color: '#94A3B8', padding: '12px 0' }}>Loading incidents...</div>}
+      {!loading && incidents.length === 0 && (
+        <div style={{ fontSize: 13, color: '#94A3B8', padding: '12px 0' }}>No incidents found for this system.</div>
+      )}
+      {incidents.map((inc, i) => (
         <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 0', borderBottom: '1px solid #F1F5F9' }}>
           <div>
-            <div style={{ fontSize: 13, fontWeight: 500, color: '#334155' }}>{inc.title}</div>
-            <div style={{ fontSize: 12, color: '#94A3B8', marginTop: 2 }}>Detected: {inc.date}</div>
+            <div style={{ fontSize: 13, fontWeight: 500, color: '#334155' }}>{inc.title as string}</div>
+            <div style={{ fontSize: 12, color: '#94A3B8', marginTop: 2 }}>Detected: {inc.reportedAt ? new Date(inc.reportedAt as string).toLocaleDateString() : '-'}</div>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Badge variant={inc.severity === 'critical' ? 'danger' : inc.severity === 'high' ? 'danger' : inc.severity === 'medium' ? 'warning' : 'default'}>
-              {inc.severity}
+            <Badge variant={(inc.severity as string) === 'critical' || (inc.severity as string) === 'high' ? 'danger' : (inc.severity as string) === 'medium' ? 'warning' : 'default'}>
+              {inc.severity as string}
             </Badge>
-            <Badge variant={inc.status === 'resolved' ? 'success' : inc.status === 'investigating' ? 'info' : 'warning'}>
-              {inc.status}
+            <Badge variant={(inc.status as string) === 'resolved' ? 'success' : (inc.status as string) === 'investigating' ? 'info' : 'warning'}>
+              {inc.status as string}
             </Badge>
           </div>
         </div>
@@ -201,19 +226,81 @@ function IncidentsTab() {
   );
 }
 
-const tabComponents: Record<string, () => React.ReactElement> = {
-  Overview: OverviewTab,
-  'Risk Assessment': RiskAssessmentTab,
-  Documents: DocumentsTab,
-  Evidence: EvidenceTab,
-  Monitoring: MonitoringTab,
-  Incidents: IncidentsTab,
-};
-
 export default function SystemDetailPage() {
   const params = useParams();
   const [activeTab, setActiveTab] = useState('Overview');
-  const TabContent = tabComponents[activeTab];
+  const [system, setSystem] = useState<SystemData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const systemId = params.id as string;
+
+  useEffect(() => {
+    if (!systemId) return;
+    setLoading(true);
+    fetch(`/api/v1/systems/${systemId}`)
+      .then((r) => {
+        if (!r.ok) throw new Error('System not found');
+        return r.json();
+      })
+      .then((json) => {
+        const s = json.data;
+        setSystem({
+          id: s.id,
+          name: s.name,
+          description: s.description || '',
+          purpose: s.purpose || '',
+          riskLevel: s.riskLevel || 'minimal',
+          status: s.status || 'draft',
+          provider: s.provider || '-',
+          version: s.version || '-',
+          deploymentType: s.deploymentType || '-',
+          createdAt: s.createdAt || '',
+          updatedAt: s.updatedAt || '',
+          annexIIICategory: s.annexIIICategory,
+        });
+      })
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false));
+  }, [systemId]);
+
+  if (loading) {
+    return (
+      <div>
+        <a href="/registry" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 13, color: '#64748B', textDecoration: 'none', marginBottom: 16 }}>
+          &larr; Back to Registry
+        </a>
+        <div style={{ textAlign: 'center', padding: '48px 0', color: '#64748B', fontSize: 14 }}>Loading system details...</div>
+      </div>
+    );
+  }
+
+  if (error || !system) {
+    return (
+      <div>
+        <a href="/registry" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 13, color: '#64748B', textDecoration: 'none', marginBottom: 16 }}>
+          &larr; Back to Registry
+        </a>
+        <Card>
+          <div style={{ textAlign: 'center', padding: '32px 0', color: '#EF4444', fontSize: 14 }}>
+            {error || 'System not found'}
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  function renderTabContent() {
+    switch (activeTab) {
+      case 'Overview': return <OverviewTab system={system!} />;
+      case 'Risk Assessment': return <RiskAssessmentTab systemId={systemId} />;
+      case 'Documents': return <DocumentsTab systemId={systemId} />;
+      case 'Evidence': return <EvidenceTab systemId={systemId} />;
+      case 'Monitoring': return <MonitoringTab />;
+      case 'Incidents': return <IncidentsTab systemId={systemId} />;
+      default: return null;
+    }
+  }
 
   return (
     <div>
@@ -239,13 +326,13 @@ export default function SystemDetailPage() {
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
               <h1 style={{ fontSize: 22, fontWeight: 700, color: '#0F172A', margin: 0, letterSpacing: '-0.02em' }}>
-                {mockSystem.name}
+                {system.name}
               </h1>
-              <RiskBadge level={mockSystem.riskLevel} />
-              <Badge variant="success">{mockSystem.status}</Badge>
+              <RiskBadge level={system.riskLevel} />
+              <Badge variant="success">{system.status}</Badge>
             </div>
             <p style={{ fontSize: 14, color: '#64748B', margin: 0, maxWidth: 700, lineHeight: 1.5 }}>
-              {mockSystem.description}
+              {system.description}
             </p>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
@@ -288,7 +375,7 @@ export default function SystemDetailPage() {
       </div>
 
       {/* Tab Content */}
-      <TabContent />
+      {renderTabContent()}
     </div>
   );
 }

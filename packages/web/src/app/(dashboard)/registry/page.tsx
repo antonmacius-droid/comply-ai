@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Card } from '@/components/ui/card';
 import { Badge, RiskBadge } from '@/components/ui/badge';
@@ -9,7 +9,6 @@ import { DataTable } from '@/components/ui/table';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
-import { DEMO_MODE } from '@/lib/demo-data';
 
 type SystemRow = Record<string, unknown> & {
   id: string;
@@ -20,19 +19,6 @@ type SystemRow = Record<string, unknown> & {
   model: string;
   lastAssessed: string;
 };
-
-const mockSystems: SystemRow[] = DEMO_MODE ? [
-  { id: '1', name: 'Credit Scoring Model', riskLevel: 'high', status: 'active', provider: 'Internal', model: 'XGBoost v3', lastAssessed: '2026-03-15' },
-  { id: '2', name: 'Resume Screening AI', riskLevel: 'high', status: 'active', provider: 'Internal', model: 'BERT-based', lastAssessed: '2026-03-01' },
-  { id: '3', name: 'Customer Support Chatbot', riskLevel: 'limited', status: 'active', provider: 'OpenAI', model: 'GPT-4o', lastAssessed: '2026-02-20' },
-  { id: '4', name: 'Fraud Detection System', riskLevel: 'high', status: 'active', provider: 'Internal', model: 'Ensemble v2', lastAssessed: '2026-03-10' },
-  { id: '5', name: 'Content Moderation AI', riskLevel: 'limited', status: 'draft', provider: 'Google', model: 'Gemini Pro', lastAssessed: '-' },
-  { id: '6', name: 'Recommendation Engine', riskLevel: 'minimal', status: 'active', provider: 'Internal', model: 'Collaborative Filter', lastAssessed: '2026-01-28' },
-  { id: '7', name: 'Document Summarizer', riskLevel: 'gpai', status: 'active', provider: 'Anthropic', model: 'Claude 3.5', lastAssessed: '2026-02-15' },
-  { id: '8', name: 'Emotion Recognition (CCTV)', riskLevel: 'high', status: 'archived', provider: 'Internal', model: 'CNN-LSTM', lastAssessed: '2025-12-01' },
-  { id: '9', name: 'Predictive Maintenance', riskLevel: 'minimal', status: 'active', provider: 'Internal', model: 'ARIMA + RF', lastAssessed: '2026-03-05' },
-  { id: '10', name: 'Translation Service', riskLevel: 'limited', status: 'active', provider: 'DeepL', model: 'DeepL API', lastAssessed: '2026-02-10' },
-] : [];
 
 const statusStyles: Record<string, { bg: string; color: string }> = {
   active: { bg: '#F0FDF4', color: '#16A34A' },
@@ -45,12 +31,79 @@ export default function RegistryPage() {
   const [showModal, setShowModal] = useState(false);
   const [filterRisk, setFilterRisk] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
+  const [systems, setSystems] = useState<SystemRow[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const filtered = mockSystems.filter((s) => {
-    if (filterRisk && s.riskLevel !== filterRisk) return false;
-    if (filterStatus && s.status !== filterStatus) return false;
-    return true;
-  });
+  // Form state for registration modal
+  const [formName, setFormName] = useState('');
+  const [formDesc, setFormDesc] = useState('');
+  const [formPurpose, setFormPurpose] = useState('');
+  const [formRisk, setFormRisk] = useState('');
+  const [formDeployment, setFormDeployment] = useState('');
+  const [formProvider, setFormProvider] = useState('');
+  const [formModel, setFormModel] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  const fetchSystems = async () => {
+    try {
+      const params = new URLSearchParams();
+      if (filterRisk) params.set('riskLevel', filterRisk);
+      if (filterStatus) params.set('status', filterStatus);
+      const res = await fetch(`/api/v1/systems?${params.toString()}`);
+      const json = await res.json();
+      const data = (json.data || []).map((s: Record<string, unknown>) => ({
+        id: s.id as string,
+        name: s.name as string,
+        riskLevel: (s.riskLevel || 'minimal') as SystemRow['riskLevel'],
+        status: (s.status || 'draft') as string,
+        provider: (s.provider || '-') as string,
+        model: (s.modelName || s.version || '-') as string,
+        lastAssessed: s.updatedAt ? new Date(s.updatedAt as string).toISOString().slice(0, 10) : '-',
+      }));
+      setSystems(data);
+    } catch (err) {
+      console.error('Failed to fetch systems:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchSystems();
+  }, [filterRisk, filterStatus]);
+
+  const handleRegister = async () => {
+    if (!formName.trim() || !formDesc.trim() || formDesc.trim().length < 10) return;
+    setSubmitting(true);
+    try {
+      const res = await fetch('/api/v1/systems', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: formName.trim(),
+          description: formDesc.trim(),
+          purpose: formPurpose.trim() || formDesc.trim(),
+          riskLevel: formRisk || undefined,
+          providerType: formProvider.trim() || undefined,
+          modelName: formModel.trim() || undefined,
+          deploymentType: formDeployment || undefined,
+        }),
+      });
+      if (res.ok) {
+        setShowModal(false);
+        setFormName(''); setFormDesc(''); setFormPurpose('');
+        setFormRisk(''); setFormDeployment('');
+        setFormProvider(''); setFormModel('');
+        fetchSystems();
+      }
+    } catch (err) {
+      console.error('Failed to register system:', err);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const filtered = systems;
 
   const columns = [
     {
@@ -188,22 +241,31 @@ export default function RegistryPage() {
         </div>
       </div>
 
+      {/* Loading */}
+      {loading && (
+        <div style={{ textAlign: 'center', padding: '48px 0', color: '#64748B', fontSize: 14 }}>
+          Loading systems...
+        </div>
+      )}
+
       {/* Table */}
-      <DataTable<SystemRow>
+      {!loading && <DataTable<SystemRow>
         columns={columns}
         data={filtered}
         onRowClick={(row) => router.push(`/registry/${row.id}`)}
-      />
+      />}
 
       {/* Register Modal */}
       <Modal open={showModal} onClose={() => setShowModal(false)} title="Register AI System" width={600}>
-        <Input label="System Name" placeholder="e.g., Customer Support Chatbot" />
-        <Textarea label="Description" placeholder="Brief description of what this AI system does..." />
-        <Input label="Purpose" placeholder="What is the intended purpose under EU AI Act?" />
+        <Input label="System Name" placeholder="e.g., Customer Support Chatbot" value={formName} onChange={(e) => setFormName(e.target.value)} />
+        <Textarea label="Description" placeholder="Brief description of what this AI system does (min 10 chars)..." value={formDesc} onChange={(e) => setFormDesc(e.target.value)} />
+        <Input label="Purpose" placeholder="What is the intended purpose under EU AI Act?" value={formPurpose} onChange={(e) => setFormPurpose(e.target.value)} />
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
           <Select
             label="Risk Level"
             placeholder="Select risk level"
+            value={formRisk}
+            onChange={(e) => setFormRisk(e.target.value)}
             options={[
               { value: 'high', label: 'High Risk' },
               { value: 'limited', label: 'Limited Risk' },
@@ -214,6 +276,8 @@ export default function RegistryPage() {
           <Select
             label="Deployment Type"
             placeholder="Select type"
+            value={formDeployment}
+            onChange={(e) => setFormDeployment(e.target.value)}
             options={[
               { value: 'cloud', label: 'Cloud' },
               { value: 'on-premise', label: 'On-Premise' },
@@ -223,14 +287,16 @@ export default function RegistryPage() {
           />
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-          <Input label="Provider / Vendor" placeholder="e.g., OpenAI, Internal" />
-          <Input label="Model Name" placeholder="e.g., GPT-4o, XGBoost v3" />
+          <Input label="Provider / Vendor" placeholder="e.g., OpenAI, Internal" value={formProvider} onChange={(e) => setFormProvider(e.target.value)} />
+          <Input label="Model Name" placeholder="e.g., GPT-4o, XGBoost v3" value={formModel} onChange={(e) => setFormModel(e.target.value)} />
         </div>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 8 }}>
           <Button variant="secondary" onClick={() => setShowModal(false)}>
             Cancel
           </Button>
-          <Button onClick={() => setShowModal(false)}>Register System</Button>
+          <Button onClick={handleRegister} disabled={submitting}>
+            {submitting ? 'Registering...' : 'Register System'}
+          </Button>
         </div>
       </Modal>
     </div>

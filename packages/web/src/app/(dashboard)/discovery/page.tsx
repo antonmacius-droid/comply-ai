@@ -1,11 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, KpiCard } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { DEMO_MODE } from '@/lib/demo-data';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -37,116 +36,30 @@ interface ScanResult {
 // Mock previously scanned results
 // ---------------------------------------------------------------------------
 
-const previousScans: ScanResult[] = DEMO_MODE ? [
-  {
-    id: 'scan_001',
-    org: 'acme-corp',
-    scannedAt: '2026-03-28T10:00:00Z',
-    totalReposScanned: 32,
-    aiReposFound: 4,
-    results: [
-      {
-        repoName: 'acme-corp/credit-scoring-model',
-        repoUrl: 'https://github.com/acme-corp/credit-scoring-model',
-        detectedFrameworks: ['scikit-learn', 'xgboost'],
-        detectedUsage: 'ML model for credit decisions — requirements.txt',
-        suggestedRiskLevel: 'high',
-        confidence: 94,
-        lastCommit: '2026-03-25T14:30:00Z',
-        stars: 12,
-        language: 'Python',
-        registered: true,
-      },
-      {
-        repoName: 'acme-corp/support-chatbot',
-        repoUrl: 'https://github.com/acme-corp/support-chatbot',
-        detectedFrameworks: ['openai', 'langchain'],
-        detectedUsage: 'Customer support chatbot — package.json',
-        suggestedRiskLevel: 'limited',
-        confidence: 91,
-        lastCommit: '2026-03-20T09:15:00Z',
-        stars: 8,
-        language: 'TypeScript',
-        registered: true,
-      },
-    ],
-  },
-] : [];
-
-// ---------------------------------------------------------------------------
-// Simulated scan
-// ---------------------------------------------------------------------------
-
-function simulateScan(org: string): DiscoveredRepo[] {
-  return [
-    {
-      repoName: `${org}/credit-scoring-model`,
-      repoUrl: `https://github.com/${org}/credit-scoring-model`,
-      detectedFrameworks: ['scikit-learn', 'xgboost', 'pandas'],
-      detectedUsage: 'ML model for automated credit decisions — requirements.txt contains scikit-learn, xgboost',
-      suggestedRiskLevel: 'high',
-      confidence: 94,
-      lastCommit: '2026-04-02T14:30:00Z',
-      stars: 12,
-      language: 'Python',
-    },
-    {
-      repoName: `${org}/resume-screener`,
-      repoUrl: `https://github.com/${org}/resume-screener`,
-      detectedFrameworks: ['transformers', 'torch', 'huggingface-hub'],
-      detectedUsage: 'NLP-based resume screening — Dockerfile references transformers',
-      suggestedRiskLevel: 'high',
-      confidence: 97,
-      lastCommit: '2026-03-28T09:15:00Z',
-      stars: 8,
-      language: 'Python',
-    },
-    {
-      repoName: `${org}/support-chatbot`,
-      repoUrl: `https://github.com/${org}/support-chatbot`,
-      detectedFrameworks: ['openai', 'langchain'],
-      detectedUsage: 'Customer support chatbot — package.json includes openai',
-      suggestedRiskLevel: 'limited',
-      confidence: 91,
-      lastCommit: '2026-04-01T16:45:00Z',
-      stars: 23,
-      language: 'TypeScript',
-    },
-    {
-      repoName: `${org}/fraud-detection`,
-      repoUrl: `https://github.com/${org}/fraud-detection`,
-      detectedFrameworks: ['tensorflow', 'keras', 'numpy'],
-      detectedUsage: 'Real-time fraud detection — requirements.txt contains tensorflow',
-      suggestedRiskLevel: 'high',
-      confidence: 96,
-      lastCommit: '2026-03-30T11:20:00Z',
-      stars: 15,
-      language: 'Python',
-    },
-    {
-      repoName: `${org}/recommendation-api`,
-      repoUrl: `https://github.com/${org}/recommendation-api`,
-      detectedFrameworks: ['anthropic', 'pinecone-client'],
-      detectedUsage: 'Product recommendations — package.json includes anthropic SDK',
-      suggestedRiskLevel: 'minimal',
-      confidence: 82,
-      lastCommit: '2026-04-03T08:00:00Z',
-      stars: 5,
-      language: 'TypeScript',
-    },
-    {
-      repoName: `${org}/document-summarizer`,
-      repoUrl: `https://github.com/${org}/document-summarizer`,
-      detectedFrameworks: ['transformers', 'sentence-transformers'],
-      detectedUsage: 'Document summarization — Dockerfile installs transformers',
-      suggestedRiskLevel: 'limited',
-      confidence: 88,
-      lastCommit: '2026-03-25T13:10:00Z',
-      stars: 3,
-      language: 'Python',
-    },
-  ];
+function mapApiScan(scan: Record<string, unknown>): ScanResult {
+  const results = ((scan.results as Array<Record<string, unknown>>) || []).map((r) => ({
+    repoName: (r.repoName as string) || '',
+    repoUrl: (r.repoUrl as string) || '',
+    detectedFrameworks: (r.detectedFrameworks as string[]) || [],
+    detectedUsage: (r.detectedUsage as string) || '',
+    suggestedRiskLevel: (r.suggestedRiskLevel as 'high' | 'limited' | 'minimal') || 'minimal',
+    confidence: (r.confidence as number) || 0,
+    lastCommit: (r.lastCommit as string) || '',
+    stars: (r.stars as number) || 0,
+    language: (r.language as string) || '',
+    registered: r.registered as boolean | undefined,
+  }));
+  return {
+    id: (scan.id as string) || '',
+    org: (scan.org as string) || '',
+    scannedAt: (scan.scannedAt as string) || '',
+    totalReposScanned: (scan.totalReposScanned as number) || 0,
+    aiReposFound: (scan.aiReposFound as number) || results.length,
+    results,
+  };
 }
+
+// simulateScan removed — now uses API
 
 // ---------------------------------------------------------------------------
 // Style helpers
@@ -175,48 +88,71 @@ export default function DiscoveryPage() {
   const [scanning, setScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState(0);
   const [currentScan, setCurrentScan] = useState<ScanResult | null>(null);
-  const [scans, setScans] = useState(previousScans);
-  const [registeredRepos, setRegisteredRepos] = useState<Set<string>>(
-    new Set(previousScans.flatMap((s) => s.results.filter((r) => r.registered).map((r) => r.repoName)))
-  );
+  const [scans, setScans] = useState<ScanResult[]>([]);
+  const [registeredRepos, setRegisteredRepos] = useState<Set<string>>(new Set());
+  const [loadingScans, setLoadingScans] = useState(true);
+
+  // Fetch previous scans from API
+  useEffect(() => {
+    setLoadingScans(true);
+    fetch('/api/v1/discovery')
+      .then((r) => r.json())
+      .then((json) => {
+        const scanResults = ((json.data || []) as Array<Record<string, unknown>>).map(mapApiScan);
+        setScans(scanResults);
+        const registeredSet = new Set(
+          scanResults.flatMap((s) => s.results.filter((r) => r.registered).map((r) => r.repoName))
+        );
+        setRegisteredRepos(registeredSet);
+      })
+      .catch(() => {})
+      .finally(() => setLoadingScans(false));
+  }, []);
 
   const totalDiscovered = scans.reduce((sum, s) => sum + s.aiReposFound, 0);
   const totalRegistered = registeredRepos.size;
 
-  function handleScan() {
+  async function handleScan() {
     if (!orgName.trim() || scanning) return;
 
     setScanning(true);
     setScanProgress(0);
     setCurrentScan(null);
 
-    // Simulate progressive scanning
-    const steps = [10, 25, 45, 65, 80, 95, 100];
+    // Show progressive scanning UI
+    const steps = [10, 25, 45, 65, 80, 95];
     let step = 0;
-
     const interval = setInterval(() => {
       if (step < steps.length) {
         setScanProgress(steps[step]!);
         step++;
-      } else {
-        clearInterval(interval);
+      }
+    }, 300);
 
-        const results = simulateScan(orgName.trim());
-        const scan: ScanResult = {
-          id: `scan_${Date.now()}`,
-          org: orgName.trim(),
-          scannedAt: new Date().toISOString(),
-          totalReposScanned: 28 + Math.floor(Math.random() * 15),
-          aiReposFound: results.length,
-          results,
-        };
+    try {
+      const res = await fetch('/api/v1/discovery', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ org: orgName.trim() }),
+      });
+      const json = await res.json();
+      clearInterval(interval);
+      setScanProgress(100);
 
+      if (res.ok && json.data?.result) {
+        const scan = mapApiScan(json.data.result);
         setCurrentScan(scan);
         setScans((prev) => [scan, ...prev]);
-        setScanning(false);
-        setScanProgress(0);
       }
-    }, 350);
+    } catch (err) {
+      console.error('Failed to run discovery scan:', err);
+      clearInterval(interval);
+    }
+
+    setTimeout(() => {
+      setScanning(false);
+      setScanProgress(0);
+    }, 500);
   }
 
   function handleRegister(repoName: string) {

@@ -1,10 +1,9 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { DEMO_MODE } from '@/lib/demo-data';
 
 /* ─── Data Types ─── */
 interface WizardStep {
@@ -24,15 +23,12 @@ const STEPS: WizardStep[] = [
   { id: 'review', number: 7, title: 'Review & Submit', description: 'Final summary and submission' },
 ];
 
-const mockSystems = DEMO_MODE ? [
-  { id: 'sys_001', name: 'Credit Scoring Model', provider: 'Internal', risk: 'high' },
-  { id: 'sys_002', name: 'Customer Support Chatbot', provider: 'OpenAI GPT-4o', risk: 'limited' },
-  { id: 'sys_003', name: 'Resume Screening AI', provider: 'Internal', risk: 'high' },
-  { id: 'sys_004', name: 'Fraud Detection System', provider: 'Internal', risk: 'high' },
-  { id: 'sys_005', name: 'Document Summarizer', provider: 'Anthropic Claude', risk: 'gpai' },
-  { id: 'sys_006', name: 'Content Moderation AI', provider: 'Internal', risk: 'limited' },
-  { id: 'sys_007', name: 'Emotion Recognition (CCTV)', provider: 'Internal', risk: 'high' },
-] : [];
+interface SystemOption {
+  id: string;
+  name: string;
+  provider: string;
+  risk: string;
+}
 
 /* ─── Article 5 Prohibited Practices ─── */
 const prohibitedQuestions = [
@@ -146,6 +142,26 @@ function getRiskBadgeVariant(score: number): 'danger' | 'high' | 'warning' | 'in
 export default function RiskAssessmentPage() {
   const [currentStep, setCurrentStep] = useState(0);
   const [wizardStarted, setWizardStarted] = useState(false);
+  const [systemsList, setSystemsList] = useState<SystemOption[]>([]);
+  const [loadingSystems, setLoadingSystems] = useState(true);
+
+  // Fetch systems from API
+  useEffect(() => {
+    setLoadingSystems(true);
+    fetch('/api/v1/systems')
+      .then((r) => r.json())
+      .then((json) => {
+        const opts = ((json.data || []) as Array<Record<string, unknown>>).map((s) => ({
+          id: s.id as string,
+          name: s.name as string,
+          provider: (s.provider as string) || '-',
+          risk: (s.riskLevel as string) || 'minimal',
+        }));
+        setSystemsList(opts);
+      })
+      .catch(() => {})
+      .finally(() => setLoadingSystems(false));
+  }, []);
 
   // Step 1: System
   const [selectedSystem, setSelectedSystem] = useState('');
@@ -215,7 +231,7 @@ export default function RiskAssessmentPage() {
     }
   };
 
-  const systemName = mockSystems.find((s) => s.id === selectedSystem)?.name || '';
+  const systemName = systemsList.find((s) => s.id === selectedSystem)?.name || '';
 
   /* ─── Risk Score Widget ─── */
   const RiskScoreWidget = () => (
@@ -429,7 +445,7 @@ export default function RiskAssessmentPage() {
               Choose the AI system you want to assess. The system must be registered in your inventory.
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {mockSystems.map((sys) => (
+              {systemsList.map((sys) => (
                 <label
                   key={sys.id}
                   style={{
@@ -992,7 +1008,28 @@ export default function RiskAssessmentPage() {
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M5 12h14M12 5l7 7-7 7" /></svg>
               </Button>
             ) : (
-              <Button onClick={() => setSubmitted(true)}>
+              <Button onClick={async () => {
+                try {
+                  const systemName = systemsList.find((s) => s.id === selectedSystem)?.name || '';
+                  await fetch('/api/v1/assessments', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      systemId: selectedSystem,
+                      name: `Risk Assessment — ${systemName}`,
+                      description: `Comprehensive EU AI Act risk assessment for ${systemName}`,
+                      purpose: `Evaluate ${systemName} against EU AI Act requirements`,
+                      category: selectedCategory || undefined,
+                      isGeneralPurpose: isGpai === 'yes',
+                      performsSocialScoring: prohibitedAnswers['p3'] === 'yes',
+                      usesSubliminalTechniques: prohibitedAnswers['p1'] === 'yes',
+                    }),
+                  });
+                } catch (err) {
+                  console.error('Failed to submit assessment:', err);
+                }
+                setSubmitted(true);
+              }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" /></svg>
                 Submit Assessment
               </Button>

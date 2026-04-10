@@ -1,13 +1,12 @@
 'use client';
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { Input, Textarea } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
-import { DEMO_MODE } from '@/lib/demo-data';
 
 /* ─── Types ─── */
 interface EvidenceRecord {
@@ -26,98 +25,24 @@ interface EvidenceRecord {
   sha256: string;
 }
 
-/* ─── Mock Data ─── */
-const mockEvidence: EvidenceRecord[] = DEMO_MODE ? [
-  {
-    id: 'ev_001',
-    title: 'Training Data Quality Report',
-    description: 'Comprehensive data quality assessment for the credit scoring training dataset.',
-    fileName: 'training_data_quality_report_v3.pdf',
-    fileSize: 2457600,
-    fileType: 'application/pdf',
-    systemId: 'sys_001',
-    systemName: 'Credit Scoring Model',
-    assessmentId: 'ra_001',
-    tags: ['data-quality', 'training', 'audit'],
-    uploadedBy: 'Maria L.',
-    uploadedAt: '2026-03-28T14:30:00Z',
-    sha256: 'a7ffc6f8bf1ed76651c14756a061d662f580ff4de43b49fa82d80a4b80f8434a',
-  },
-  {
-    id: 'ev_002',
-    title: 'Bias Testing Results',
-    description: 'Results of fairness and bias testing across protected characteristics.',
-    fileName: 'bias_testing_results_march2026.xlsx',
-    fileSize: 891200,
-    fileType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    systemId: 'sys_001',
-    systemName: 'Credit Scoring Model',
-    assessmentId: 'ra_001',
-    tags: ['bias', 'fairness', 'testing'],
-    uploadedBy: 'Jan D.',
-    uploadedAt: '2026-03-25T10:15:00Z',
-    sha256: 'b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9',
-  },
-  {
-    id: 'ev_003',
-    title: 'Human Oversight Protocol',
-    description: 'Documentation of human-in-the-loop oversight procedures and escalation paths.',
-    fileName: 'human_oversight_protocol_v2.docx',
-    fileSize: 340800,
-    fileType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    systemId: 'sys_003',
-    systemName: 'Resume Screening AI',
-    assessmentId: null,
-    tags: ['oversight', 'protocol', 'human-in-the-loop'],
-    uploadedBy: 'Anton K.',
-    uploadedAt: '2026-03-22T09:00:00Z',
-    sha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
-  },
-  {
-    id: 'ev_004',
-    title: 'Model Performance Benchmarks',
-    description: 'Accuracy, precision, recall, and F1 scores across demographic groups.',
-    fileName: 'model_benchmarks_q1_2026.pdf',
-    fileSize: 1536000,
-    fileType: 'application/pdf',
-    systemId: 'sys_004',
-    systemName: 'Fraud Detection System',
-    assessmentId: null,
-    tags: ['performance', 'benchmarks', 'accuracy'],
-    uploadedBy: 'Sarah M.',
-    uploadedAt: '2026-03-20T16:45:00Z',
-    sha256: 'd7a8fbb307d7809469ca9abcb0082e4f8d5651e46d3cdb762d02d0bf37c9e592',
-  },
-  {
-    id: 'ev_005',
-    title: 'Risk Management Framework',
-    description: 'Organization-wide AI risk management framework aligned with ISO 23894.',
-    fileName: 'risk_management_framework.png',
-    fileSize: 4205568,
-    fileType: 'image/png',
-    systemId: 'sys_001',
-    systemName: 'Credit Scoring Model',
-    assessmentId: 'ra_001',
-    tags: ['risk', 'framework', 'ISO'],
-    uploadedBy: 'Anton K.',
-    uploadedAt: '2026-03-18T11:20:00Z',
-    sha256: '4e07408562bedb8b60ce05c1decfe3ad16b72230967de01f640b7e4729b49fce',
-  },
-] : [];
-
-const mockSystems = DEMO_MODE ? [
-  { value: 'sys_001', label: 'Credit Scoring Model' },
-  { value: 'sys_002', label: 'Customer Support Chatbot' },
-  { value: 'sys_003', label: 'Resume Screening AI' },
-  { value: 'sys_004', label: 'Fraud Detection System' },
-  { value: 'sys_005', label: 'Document Summarizer' },
-] : [];
-
-const mockAssessments = DEMO_MODE ? [
-  { value: '', label: 'None' },
-  { value: 'ra_001', label: 'RA-001 — Credit Scoring Model' },
-  { value: 'ra_002', label: 'RA-002 — Customer Support Chatbot' },
-] : [];
+/* ─── API data mapping ─── */
+function mapApiEvidence(e: Record<string, unknown>): EvidenceRecord {
+  return {
+    id: e.id as string,
+    title: (e.title as string) || 'Evidence',
+    description: (e.description as string) || '',
+    fileName: (e.fileName as string) || 'file',
+    fileSize: (e.fileSizeBytes as number) || 0,
+    fileType: (e.fileType as string) || 'application/octet-stream',
+    systemId: (e.systemId as string) || '',
+    systemName: (e.systemName as string) || '-',
+    assessmentId: (e.assessmentId as string) || null,
+    tags: (e.tags as string[]) || [],
+    uploadedBy: (e.uploadedBy as string) || '-',
+    uploadedAt: (e.createdAt as string) || new Date().toISOString(),
+    sha256: (e.fileHash as string) || '',
+  };
+}
 
 /* ─── Helpers ─── */
 function formatFileSize(bytes: number): string {
@@ -145,11 +70,61 @@ function formatDate(iso: string): string {
 
 /* ─── Component ─── */
 export default function EvidencePage() {
-  const [evidence, setEvidence] = useState<EvidenceRecord[]>(mockEvidence);
+  const [evidence, setEvidence] = useState<EvidenceRecord[]>([]);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState<EvidenceRecord | null>(null);
   const [filterSystem, setFilterSystem] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [systemOptions, setSystemOptions] = useState<Array<{ value: string; label: string }>>([]);
+  const [assessmentOptions, setAssessmentOptions] = useState<Array<{ value: string; label: string }>>([{ value: '', label: 'None' }]);
+  const [loadingEvidence, setLoadingEvidence] = useState(true);
+
+  // Fetch systems for dropdown
+  useEffect(() => {
+    fetch('/api/v1/systems')
+      .then((r) => r.json())
+      .then((json) => {
+        const opts = ((json.data || []) as Array<Record<string, unknown>>).map((s) => ({
+          value: s.id as string,
+          label: s.name as string,
+        }));
+        setSystemOptions(opts);
+      })
+      .catch(() => {});
+  }, []);
+
+  // Fetch assessments for dropdown
+  useEffect(() => {
+    fetch('/api/v1/assessments')
+      .then((r) => r.json())
+      .then((json) => {
+        const opts = [{ value: '', label: 'None' }, ...((json.data || []) as Array<Record<string, unknown>>).map((a) => ({
+          value: a.id as string,
+          label: `${(a.id as string).slice(0, 8)} — ${(a.name as string) || 'Assessment'}`,
+        }))];
+        setAssessmentOptions(opts);
+      })
+      .catch(() => {});
+  }, []);
+
+  // Fetch evidence from API
+  const fetchEvidence = useCallback(() => {
+    setLoadingEvidence(true);
+    const params = new URLSearchParams();
+    if (filterSystem) params.set('systemId', filterSystem);
+    fetch(`/api/v1/evidence?${params.toString()}`)
+      .then((r) => r.json())
+      .then((json) => {
+        const items = ((json.data || []) as Array<Record<string, unknown>>).map(mapApiEvidence);
+        setEvidence(items);
+      })
+      .catch(() => {})
+      .finally(() => setLoadingEvidence(false));
+  }, [filterSystem]);
+
+  useEffect(() => {
+    fetchEvidence();
+  }, [fetchEvidence]);
 
   // Upload form state
   const [uploadTitle, setUploadTitle] = useState('');
@@ -199,36 +174,41 @@ export default function EvidencePage() {
     }
   };
 
-  const handleUpload = () => {
+  const handleUpload = async () => {
     if (!uploadFile || !uploadTitle || !uploadSystem) return;
     setUploading(true);
-    setTimeout(() => {
-      const system = mockSystems.find((s) => s.value === uploadSystem);
-      const newEvidence: EvidenceRecord = {
-        id: 'ev_' + Math.random().toString(36).slice(2, 8),
-        title: uploadTitle,
-        description: uploadDescription,
-        fileName: uploadFile.name,
-        fileSize: uploadFile.size,
-        fileType: uploadFile.type || 'application/octet-stream',
-        systemId: uploadSystem,
-        systemName: system?.label || 'Unknown',
-        assessmentId: uploadAssessment || null,
-        tags: uploadTags.split(',').map((t) => t.trim()).filter(Boolean),
-        uploadedBy: 'Anton K.',
-        uploadedAt: new Date().toISOString(),
-        sha256: generateFakeHash(),
-      };
-      setEvidence((prev) => [newEvidence, ...prev]);
-      setShowUploadModal(false);
-      setUploadTitle('');
-      setUploadDescription('');
-      setUploadSystem('');
-      setUploadAssessment('');
-      setUploadTags('');
-      setUploadFile(null);
-      setUploading(false);
-    }, 800);
+    try {
+      const res = await fetch('/api/v1/evidence', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: uploadTitle,
+          description: uploadDescription,
+          systemId: uploadSystem,
+          type: 'document',
+          fileName: uploadFile.name,
+          fileSizeBytes: uploadFile.size,
+          fileHash: generateFakeHash(),
+          uploadedBy: 'user',
+          metadata: {
+            tags: uploadTags.split(',').map((t) => t.trim()).filter(Boolean),
+          },
+        }),
+      });
+      if (res.ok) {
+        fetchEvidence();
+      }
+    } catch (err) {
+      console.error('Failed to upload evidence:', err);
+    }
+    setShowUploadModal(false);
+    setUploadTitle('');
+    setUploadDescription('');
+    setUploadSystem('');
+    setUploadAssessment('');
+    setUploadTags('');
+    setUploadFile(null);
+    setUploading(false);
   };
 
   const resetUploadForm = () => {
@@ -333,14 +313,21 @@ export default function EvidencePage() {
           }}
         >
           <option value="">All Systems</option>
-          {mockSystems.map((s) => (
+          {systemOptions.map((s) => (
             <option key={s.value} value={s.value}>{s.label}</option>
           ))}
         </select>
       </div>
 
+      {/* Loading */}
+      {loadingEvidence && (
+        <div style={{ textAlign: 'center', padding: '48px 0', color: '#64748B', fontSize: 14 }}>
+          Loading evidence...
+        </div>
+      )}
+
       {/* Evidence Table */}
-      <Card padding={false}>
+      {!loadingEvidence && <Card padding={false}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr>
@@ -440,7 +427,7 @@ export default function EvidencePage() {
             )}
           </tbody>
         </table>
-      </Card>
+      </Card>}
 
       {/* Upload Modal */}
       <Modal open={showUploadModal} onClose={resetUploadForm} title="Upload Evidence" width={560}>
@@ -511,14 +498,14 @@ export default function EvidencePage() {
         <Select
           label="AI System"
           placeholder="Select system"
-          options={mockSystems}
+          options={systemOptions}
           value={uploadSystem}
           onChange={(e) => setUploadSystem(e.target.value)}
         />
         <Select
           label="Link to Assessment (optional)"
           placeholder="Select assessment"
-          options={mockAssessments}
+          options={assessmentOptions}
           value={uploadAssessment}
           onChange={(e) => setUploadAssessment(e.target.value)}
         />

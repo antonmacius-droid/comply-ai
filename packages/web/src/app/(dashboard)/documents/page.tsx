@@ -1,13 +1,12 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
-import { DEMO_MODE } from '@/lib/demo-data';
 
 /* ─── Annex IV Section Definitions ─── */
 type SectionStatus = 'empty' | 'draft' | 'complete';
@@ -118,62 +117,34 @@ interface DocumentRecord {
   sections: AnnexSection[];
 }
 
-const initialDocuments: DocumentRecord[] = DEMO_MODE ? [
-  {
-    id: 'doc_001',
-    title: 'Annex IV Technical Documentation',
-    system: 'Credit Scoring Model',
-    systemId: 'sys_001',
-    type: 'annex_iv',
-    status: 'draft',
-    version: 1,
-    date: '2026-04-02',
-    author: 'Anton K.',
-    sections: defaultSections.map((s, i) =>
-      i < 3 ? { ...s, content: 'Section content has been drafted...', status: 'draft' as SectionStatus } : s
-    ),
-  },
-  {
-    id: 'doc_002',
-    title: 'Annex IV Technical Documentation',
-    system: 'Resume Screening AI',
-    systemId: 'sys_003',
-    type: 'annex_iv',
-    status: 'complete',
-    version: 2,
-    date: '2026-03-18',
-    author: 'Maria L.',
-    sections: defaultSections.map((s) => ({
-      ...s,
-      content: 'Fully completed section content for review and approval.',
-      status: 'complete' as SectionStatus,
-    })),
-  },
-  {
-    id: 'doc_003',
-    title: 'Annex IV Technical Documentation',
-    system: 'Fraud Detection System',
-    systemId: 'sys_004',
-    type: 'annex_iv',
-    status: 'draft',
-    version: 1,
-    date: '2026-03-25',
-    author: 'Jan D.',
-    sections: defaultSections.map((s, i) =>
-      i < 6
-        ? { ...s, content: 'Draft section content...', status: i < 4 ? 'complete' as SectionStatus : 'draft' as SectionStatus }
-        : s
-    ),
-  },
-] : [];
+const initialDocuments: DocumentRecord[] = [];
 
-const mockSystems = DEMO_MODE ? [
-  { value: 'sys_001', label: 'Credit Scoring Model' },
-  { value: 'sys_002', label: 'Customer Support Chatbot' },
-  { value: 'sys_003', label: 'Resume Screening AI' },
-  { value: 'sys_004', label: 'Fraud Detection System' },
-  { value: 'sys_005', label: 'Document Summarizer' },
-] : [];
+function mapApiDocToRecord(doc: Record<string, unknown>): DocumentRecord {
+  const sections = ((doc.sections as Array<Record<string, unknown>>) || []).map((s, i) => {
+    const content = (s.content as string) || '';
+    const status: SectionStatus = content.trim().length === 0 ? 'empty' : content.trim().length > 100 ? 'complete' : 'draft';
+    return {
+      id: (s.id as string) || defaultSections[i]?.id || `s_${i}`,
+      number: (s.number as number) || i + 1,
+      title: (s.title as string) || defaultSections[i]?.title || `Section ${i + 1}`,
+      guidance: (s.guidance as string) || defaultSections[i]?.guidance || '',
+      content,
+      status,
+    };
+  });
+  return {
+    id: doc.id as string,
+    title: (doc.title as string) || (doc.type as string) || 'Document',
+    system: (doc.systemName as string) || '-',
+    systemId: (doc.systemId as string) || '',
+    type: (doc.type as string) || 'annex_iv',
+    status: (doc.status as string) || 'draft',
+    version: (doc.version as number) || 1,
+    date: doc.createdAt ? new Date(doc.createdAt as string).toISOString().slice(0, 10) : '-',
+    author: (doc.createdBy as string) || '-',
+    sections: sections.length > 0 ? sections : [...defaultSections],
+  };
+}
 
 /* ─── Status helpers ─── */
 const statusBadge: Record<SectionStatus, { variant: 'default' | 'warning' | 'success'; label: string }> = {
@@ -198,6 +169,35 @@ export default function DocumentsPage() {
   const [newDocTitle, setNewDocTitle] = useState('');
   const [saveFlash, setSaveFlash] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
+  const [systemOptions, setSystemOptions] = useState<Array<{ value: string; label: string }>>([]);
+  const [loadingDocs, setLoadingDocs] = useState(true);
+
+  // Fetch systems for the dropdown
+  useEffect(() => {
+    fetch('/api/v1/systems')
+      .then((r) => r.json())
+      .then((json) => {
+        const opts = ((json.data || []) as Array<Record<string, unknown>>).map((s) => ({
+          value: s.id as string,
+          label: s.name as string,
+        }));
+        setSystemOptions(opts);
+      })
+      .catch(() => {});
+  }, []);
+
+  // Fetch documents from API
+  useEffect(() => {
+    setLoadingDocs(true);
+    fetch('/api/v1/documents')
+      .then((r) => r.json())
+      .then((json) => {
+        const docs = ((json.data || []) as Array<Record<string, unknown>>).map(mapApiDocToRecord);
+        setDocuments(docs);
+      })
+      .catch(() => {})
+      .finally(() => setLoadingDocs(false));
+  }, []);
 
   const activeDoc = documents.find((d) => d.id === activeDocId) || null;
   const activeSection = activeDoc?.sections.find((s) => s.id === activeSectionId) || null;
@@ -241,24 +241,29 @@ export default function DocumentsPage() {
     }, 1200);
   };
 
-  const handleCreateDocument = () => {
+  const handleCreateDocument = async () => {
     if (!newDocSystem) return;
-    const system = mockSystems.find((s) => s.value === newDocSystem);
-    const newDoc: DocumentRecord = {
-      id: 'doc_' + Math.random().toString(36).slice(2, 8),
-      title: newDocTitle || 'Annex IV Technical Documentation',
-      system: system?.label || 'Unknown',
-      systemId: newDocSystem,
-      type: 'annex_iv',
-      status: 'draft',
-      version: 1,
-      date: new Date().toISOString().slice(0, 10),
-      author: 'Anton K.',
-      sections: [...defaultSections],
-    };
-    setDocuments((prev) => [newDoc, ...prev]);
-    setActiveDocId(newDoc.id);
-    setActiveSectionId('general');
+    try {
+      const res = await fetch('/api/v1/documents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          systemId: newDocSystem,
+          type: 'technical_documentation',
+        }),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        const newDoc = mapApiDocToRecord(json.data);
+        // Override title if user provided one
+        if (newDocTitle) newDoc.title = newDocTitle;
+        setDocuments((prev) => [newDoc, ...prev]);
+        setActiveDocId(newDoc.id);
+        setActiveSectionId('general');
+      }
+    } catch (err) {
+      console.error('Failed to create document:', err);
+    }
     setShowCreateModal(false);
     setNewDocSystem('');
     setNewDocTitle('');
@@ -300,7 +305,7 @@ export default function DocumentsPage() {
             { label: 'Total Documents', value: documents.length, accent: '#6366F1' },
             { label: 'Complete', value: documents.filter((d) => d.status === 'complete').length, accent: '#22C55E' },
             { label: 'In Progress', value: documents.filter((d) => d.status === 'draft').length, accent: '#F97316' },
-            { label: 'Avg. Completion', value: Math.round(documents.reduce((acc, d) => acc + d.sections.filter((s) => s.status === 'complete').length, 0) / documents.length / 10 * 100) + '%', accent: '#3B82F6' },
+            { label: 'Avg. Completion', value: documents.length > 0 ? Math.round(documents.reduce((acc, d) => acc + d.sections.filter((s) => s.status === 'complete').length, 0) / documents.length / 10 * 100) + '%' : '0%', accent: '#3B82F6' },
           ].map((kpi, i) => (
             <Card key={i}>
               <div style={{ fontSize: 12, fontWeight: 500, color: '#64748B', marginBottom: 8 }}>{kpi.label}</div>
@@ -312,8 +317,15 @@ export default function DocumentsPage() {
           ))}
         </div>
 
+        {/* Loading state */}
+        {loadingDocs && (
+          <div style={{ textAlign: 'center', padding: '48px 0', color: '#64748B', fontSize: 14 }}>
+            Loading documents...
+          </div>
+        )}
+
         {/* Document cards */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {!loadingDocs && <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {documents.map((doc) => {
             const completed = doc.sections.filter((s) => s.status === 'complete').length;
             const pct = Math.round((completed / doc.sections.length) * 100);
@@ -377,10 +389,10 @@ export default function DocumentsPage() {
               </div>
             );
           })}
-        </div>
+        </div>}
 
         {/* Empty state */}
-        {documents.length === 0 && (
+        {!loadingDocs && documents.length === 0 && (
           <div style={{
             textAlign: 'center', padding: '60px 20px', background: '#FFFFFF',
             borderRadius: 12, border: '1px solid #E2E8F0',
@@ -405,7 +417,7 @@ export default function DocumentsPage() {
           <Select
             label="AI System"
             placeholder="Select a registered AI system"
-            options={mockSystems}
+            options={systemOptions}
             value={newDocSystem}
             onChange={(e) => setNewDocSystem(e.target.value)}
           />

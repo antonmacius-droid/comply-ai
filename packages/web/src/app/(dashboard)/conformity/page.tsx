@@ -1,11 +1,10 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
-import { DEMO_MODE } from '@/lib/demo-data';
 
 /* ─── Types ─── */
 type ComplianceStatus = 'pending' | 'compliant' | 'non_compliant' | 'na';
@@ -27,17 +26,7 @@ interface SystemAssessment {
   checklist: ChecklistItem[];
 }
 
-/* ─── Mock Evidence ─── */
-const mockEvidencePool = DEMO_MODE ? [
-  { id: 'ev_001', title: 'Training Data Quality Report', type: 'PDF' },
-  { id: 'ev_002', title: 'Bias Testing Results', type: 'XLSX' },
-  { id: 'ev_003', title: 'Human Oversight Protocol', type: 'DOCX' },
-  { id: 'ev_004', title: 'Model Performance Benchmarks', type: 'PDF' },
-  { id: 'ev_005', title: 'Risk Management Framework', type: 'PNG' },
-  { id: 'ev_006', title: 'Incident Response Plan', type: 'PDF' },
-  { id: 'ev_007', title: 'Data Governance Policy', type: 'DOCX' },
-  { id: 'ev_008', title: 'Security Audit Report', type: 'PDF' },
-] : [];
+/* ─── Evidence pool (loaded from API) ─── */
 
 /* ─── Full Checklist Template ─── */
 function buildChecklist(): ChecklistItem[] {
@@ -98,35 +87,7 @@ function buildChecklist(): ChecklistItem[] {
   }));
 }
 
-/* ─── Systems ─── */
-const systemsList: SystemAssessment[] = DEMO_MODE ? [
-  { id: 'sys_001', name: 'Credit Scoring Model', risk: 'High Risk', checklist: buildChecklist() },
-  {
-    id: 'sys_003', name: 'Resume Screening AI', risk: 'High Risk',
-    checklist: buildChecklist().map((item, i) => ({
-      ...item,
-      status: i < 20 ? 'compliant' as ComplianceStatus : 'compliant' as ComplianceStatus,
-      evidenceIds: ['ev_003', 'ev_004'],
-      notes: 'All items verified.',
-    })),
-  },
-  {
-    id: 'sys_004', name: 'Fraud Detection System', risk: 'High Risk',
-    checklist: buildChecklist().map((item, i) => ({
-      ...item,
-      status: i < 10 ? 'compliant' as ComplianceStatus : 'pending' as ComplianceStatus,
-      evidenceIds: i < 10 ? ['ev_004'] : [],
-    })),
-  },
-  {
-    id: 'sys_007', name: 'Emotion Recognition (CCTV)', risk: 'High Risk',
-    checklist: buildChecklist().map((item) => ({
-      ...item,
-      status: 'pending' as ComplianceStatus,
-      evidenceIds: [],
-    })),
-  },
-] : [];
+/* ─── Systems (initial empty, loaded from API) ─── */
 
 /* ─── Status Config ─── */
 const statusConfig: Record<ComplianceStatus, { label: string; color: string; bg: string; border: string }> = {
@@ -138,12 +99,52 @@ const statusConfig: Record<ComplianceStatus, { label: string; color: string; bg:
 
 /* ─── Component ─── */
 export default function ConformityPage() {
-  const [systems, setSystems] = useState<SystemAssessment[]>(systemsList);
-  const [selectedSystemId, setSelectedSystemId] = useState<string>(systems[0]?.id ?? '');
+  const [systems, setSystems] = useState<SystemAssessment[]>([]);
+  const [selectedSystemId, setSelectedSystemId] = useState<string>('');
   const [evidenceModalItem, setEvidenceModalItem] = useState<string | null>(null);
   const [notesEditItem, setNotesEditItem] = useState<string | null>(null);
   const [notesEditValue, setNotesEditValue] = useState('');
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+  const [evidencePool, setEvidencePool] = useState<Array<{ id: string; title: string; type: string }>>([]);
+  const [loadingConformity, setLoadingConformity] = useState(true);
+
+  // Fetch systems from API and build conformity checklists
+  useEffect(() => {
+    setLoadingConformity(true);
+    fetch('/api/v1/systems')
+      .then((r) => r.json())
+      .then((json) => {
+        const apiSystems = ((json.data || []) as Array<Record<string, unknown>>)
+          .filter((s) => (s.riskLevel as string) === 'high')
+          .map((s) => ({
+            id: s.id as string,
+            name: s.name as string,
+            risk: 'High Risk',
+            checklist: buildChecklist(),
+          }));
+        setSystems(apiSystems);
+        if (apiSystems.length > 0 && !selectedSystemId) {
+          setSelectedSystemId(apiSystems[0].id);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoadingConformity(false));
+  }, []);
+
+  // Fetch evidence pool
+  useEffect(() => {
+    fetch('/api/v1/evidence')
+      .then((r) => r.json())
+      .then((json) => {
+        const pool = ((json.data || []) as Array<Record<string, unknown>>).map((e) => ({
+          id: e.id as string,
+          title: (e.title as string) || 'Evidence',
+          type: ((e.type as string) || 'file').toUpperCase(),
+        }));
+        setEvidencePool(pool);
+      })
+      .catch(() => {});
+  }, []);
 
   const selectedSystem = systems.find((s) => s.id === selectedSystemId);
   const checklist = selectedSystem?.checklist ?? [];
@@ -252,6 +253,20 @@ export default function ConformityPage() {
           Export Checklist PDF
         </Button>
       </div>
+
+      {loadingConformity && (
+        <div style={{ textAlign: 'center', padding: '48px 0', color: '#64748B', fontSize: 14 }}>
+          Loading systems...
+        </div>
+      )}
+
+      {systems.length === 0 && !loadingConformity && (
+        <Card>
+          <div style={{ textAlign: 'center', padding: '32px 0', color: '#64748B', fontSize: 14 }}>
+            No high-risk AI systems found. Register a high-risk system in the Registry to begin conformity assessment.
+          </div>
+        </Card>
+      )}
 
       {/* System Selector Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: `repeat(${systems.length}, 1fr)`, gap: 12, marginBottom: 28 }}>
@@ -406,7 +421,7 @@ export default function ConformityPage() {
                             {item.evidenceIds.length > 0 && (
                               <div style={{ display: 'flex', gap: 4, marginBottom: 4, flexWrap: 'wrap' }}>
                                 {item.evidenceIds.map((evId) => {
-                                  const ev = mockEvidencePool.find((e) => e.id === evId);
+                                  const ev = evidencePool.find((e) => e.id === evId);
                                   return (
                                     <span key={evId} style={{
                                       fontSize: 10, padding: '1px 6px', borderRadius: 4,
@@ -540,7 +555,7 @@ export default function ConformityPage() {
 
             <div style={{ fontSize: 13, fontWeight: 600, color: '#0F172A', marginBottom: 12 }}>Available Evidence</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {mockEvidencePool.map((ev) => {
+              {evidencePool.map((ev) => {
                 const isLinked = currentEvidenceItem.evidenceIds.includes(ev.id);
                 return (
                   <div
