@@ -6,9 +6,9 @@ export default withAuth({
   },
 });
 
-// Protect all dashboard routes and API routes (except auth)
+// Protect all dashboard routes AND API routes (except auth endpoints, static, landing, docs)
 export const config = {
   matcher: [
-    "/((?!auth|api/auth|_next|favicon|docs|$).*)",
+    "/((?!auth|api/auth|_next/static|_next/image|favicon\\.ico|docs$|$).*)",
   ],
 };

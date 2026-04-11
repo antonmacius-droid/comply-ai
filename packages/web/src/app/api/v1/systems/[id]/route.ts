@@ -5,8 +5,7 @@ import {
   updateSystem,
   deleteSystem,
 } from '@/lib/services/registry.service';
-
-const orgId = 'default';
+import { getOrgId } from '@/lib/auth-helpers';
 
 const updateSystemSchema = z.object({
   name: z.string().min(1).max(255).optional(),
@@ -28,21 +27,16 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const system = getSystem(id, orgId);
+    const orgId = await getOrgId();
+    const system = await getSystem(id, orgId);
 
     if (!system) {
-      return NextResponse.json(
-        { error: 'System not found' },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: 'System not found' }, { status: 404 });
     }
 
     return NextResponse.json({ data: system });
   } catch (error) {
-    return NextResponse.json(
-      { error: 'Failed to fetch system' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to fetch system' }, { status: 500 });
   }
 }
 
@@ -53,6 +47,7 @@ export async function PUT(
 ) {
   try {
     const { id } = await params;
+    const orgId = await getOrgId();
     const body = await request.json();
     const parsed = updateSystemSchema.safeParse(body);
 
@@ -63,7 +58,6 @@ export async function PUT(
       );
     }
 
-    // Map route fields to service fields
     const serviceData: Record<string, unknown> = {};
     if (parsed.data.name !== undefined) serviceData.name = parsed.data.name;
     if (parsed.data.description !== undefined) serviceData.description = parsed.data.description;
@@ -71,21 +65,15 @@ export async function PUT(
     if (parsed.data.riskLevel !== undefined) serviceData.riskLevel = parsed.data.riskLevel;
     if (parsed.data.providerType !== undefined) serviceData.provider = parsed.data.providerType;
 
-    const system = updateSystem(id, serviceData, orgId);
+    const system = await updateSystem(id, serviceData, orgId);
 
     if (!system) {
-      return NextResponse.json(
-        { error: 'System not found' },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: 'System not found' }, { status: 404 });
     }
 
     return NextResponse.json({ data: system });
   } catch (error) {
-    return NextResponse.json(
-      { error: 'Failed to update system' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to update system' }, { status: 500 });
   }
 }
 
@@ -96,20 +84,15 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
-    const deleted = deleteSystem(id, orgId);
+    const orgId = await getOrgId();
+    const deleted = await deleteSystem(id, orgId);
 
     if (!deleted) {
-      return NextResponse.json(
-        { error: 'System not found' },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: 'System not found' }, { status: 404 });
     }
 
     return NextResponse.json({ data: { id, deleted: true } });
   } catch (error) {
-    return NextResponse.json(
-      { error: 'Failed to delete system' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to delete system' }, { status: 500 });
   }
 }

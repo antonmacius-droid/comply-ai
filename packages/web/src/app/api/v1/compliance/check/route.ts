@@ -4,8 +4,7 @@ import { getSystem } from '@/lib/services/registry.service';
 import { listAssessments } from '@/lib/services/risk-assessment.service';
 import { listDocuments } from '@/lib/services/document.service';
 import { listEvidence } from '@/lib/services/evidence.service';
-
-const orgId = 'default';
+import { getOrgId } from '@/lib/auth-helpers';
 
 const complianceCheckSchema = z.object({
   systemId: z.string().optional(),
@@ -49,6 +48,7 @@ export async function POST(request: NextRequest) {
     let systemName = parsed.data.systemName || 'Unknown System';
 
     // Try to look up the system dynamically
+    const orgId = await getOrgId();
     if (systemId) {
       const system = await getSystem(systemId, orgId);
       if (system) {

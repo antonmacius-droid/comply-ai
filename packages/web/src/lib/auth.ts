@@ -37,7 +37,7 @@ export const authOptions: NextAuthOptions = {
         if (!credentials?.email) return null;
 
         const devPassword = process.env.AUTH_DEV_PASSWORD || "comply";
-        if (process.env.NODE_ENV !== "production" || !process.env.DATABASE_URL) {
+        if (process.env.NODE_ENV !== "production") {
           if (credentials.password === devPassword) {
             return {
               id: "dev_user",
@@ -79,5 +79,5 @@ export const authOptions: NextAuthOptions = {
     signIn: "/auth/signin",
   },
 
-  secret: process.env.NEXTAUTH_SECRET || "comply-ai-dev-secret-change-in-production",
+  secret: process.env.NEXTAUTH_SECRET || (process.env.NODE_ENV === "production" ? undefined : "comply-ai-dev-secret-DO-NOT-USE-IN-PRODUCTION"),
 };
